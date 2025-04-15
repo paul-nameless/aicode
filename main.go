@@ -89,7 +89,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 
-				renderedResponse := response
+				renderedResponse := "\n" + response
 				// renderedResponse, err := renderer.Render(response)
 				// if err != nil {
 				// 	renderedResponse = response
