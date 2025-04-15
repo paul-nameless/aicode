@@ -51,30 +51,58 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			isCommand, cmdResult := handleCommand(input, &m)
-			if isCommand {
+			// Check if it's a special command
+			if len(input) > 0 && input[0] == '/' {
+				isCommand, cmdResult := handleCommand(input, &m)
+				if isCommand {
+					m.textInput.Reset()
+					return m, cmdResult
+				}
+			}
+
+			// Send input to OpenAI API
+			return m, func() tea.Msg {
+				// Display user input first
+				renderer, _ := glamour.NewTermRenderer(
+					glamour.WithStandardStyle("dark"),
+					glamour.WithWordWrap(80),
+				)
+
+				rendered, err := renderer.Render(input)
+				if err != nil {
+					rendered = input
+				}
+
+				m.entries = append(m.entries, entry{
+					raw:      input,
+					rendered: rendered,
+				})
+
+				// Send to OpenAI and get response
+				response, err := AskOpenAI("gpt-4.1-nano", input)
+				if err != nil {
+					return entry{
+						raw:      fmt.Sprintf("Error: %v", err),
+						rendered: fmt.Sprintf("Error: %v", err),
+					}
+				}
+
+				renderedResponse, err := renderer.Render(response)
+				if err != nil {
+					renderedResponse = response
+				}
+
 				m.textInput.Reset()
-				return m, cmdResult
+				return entry{
+					raw:      response,
+					rendered: renderedResponse,
+				}
 			}
-
-			renderer, _ := glamour.NewTermRenderer(
-				glamour.WithStandardStyle("dark"),
-				glamour.WithWordWrap(80),
-			)
-
-			rendered, err := renderer.Render(input)
-			if err != nil {
-				rendered = "Error rendering markdown\n"
-			}
-
-			m.entries = append(m.entries, entry{
-				raw:      input,
-				rendered: rendered,
-			})
-
-			m.textInput.Reset()
-			return m, nil
 		}
+	case entry:
+		// Handle the response from AskOpenAI
+		m.entries = append(m.entries, msg)
+		return m, nil
 	}
 
 	m.textInput, cmd = m.textInput.Update(msg)
@@ -85,6 +113,7 @@ func handleCommand(input string, m *model) (bool, tea.Cmd) {
 	if len(input) > 0 && input[0] == '/' {
 		cmd := input[1:]
 
+		// Handle commands that don't have parameters
 		switch cmd {
 		case "exit":
 			return true, tea.Quit
@@ -106,15 +135,15 @@ func handleCommand(input string, m *model) (bool, tea.Cmd) {
 				rendered: rendered,
 			})
 			return true, nil
-
-		default:
-			helpText := fmt.Sprintf("Unknown command: %s", cmd)
-			m.entries = append(m.entries, entry{
-				raw:      helpText,
-				rendered: helpText,
-			})
-			return true, nil
 		}
+
+		// Default case for unknown commands
+		helpText := fmt.Sprintf("Unknown command: %s", cmd)
+		m.entries = append(m.entries, entry{
+			raw:      helpText,
+			rendered: helpText,
+		})
+		return true, nil
 	}
 	return false, nil
 }

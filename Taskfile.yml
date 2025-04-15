@@ -4,4 +4,4 @@ version: "3"
 
 tasks:
   default:
-    - go run .
+    - OPENAI_API_KEY=$(pass show i/openai.com-api-key| head -n 1) go run .
