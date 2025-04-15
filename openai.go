@@ -4,16 +4,29 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type openaiRequest struct {
 	Model    string           `json:"model"`
 	Messages []openaiMessage  `json:"messages"`
+	Tools    []openaiTool     `json:"tools,omitempty"`
+}
+
+type openaiTool struct {
+	Type       string           `json:"type"`
+	Function   openaiFunction   `json:"function"`
+}
+
+type openaiFunction struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 type openaiMessage struct {
@@ -21,9 +34,24 @@ type openaiMessage struct {
 	Content string `json:"content"`
 }
 
+type toolCallFunction struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+}
+
+type toolCall struct {
+	ID       string           `json:"id"`
+	Type     string           `json:"type"`
+	Function toolCallFunction `json:"function"`
+}
+
 type openaiResponse struct {
 	Choices []struct {
-		Message openaiMessage `json:"message"`
+		Message struct {
+			Role      string     `json:"role"`
+			Content   string     `json:"content"`
+			ToolCalls []toolCall `json:"tool_calls,omitempty"`
+		} `json:"message"`
 	} `json:"choices"`
 	Error *struct {
 		Message string `json:"message"`
@@ -38,7 +66,8 @@ type ConversationEntry struct {
 
 // Global variables
 var conversationHistory []ConversationEntry
-var systemMessages []openaiMessage // Store system messages loaded at startup
+var systemMessage openaiMessage // Store the system message (text.md)
+var tools []openaiTool // Store the tools loaded at startup
 
 // getConversationHistory returns the conversation history as OpenAI messages
 func getConversationHistory() []openaiMessage {
@@ -58,9 +87,11 @@ func getConversationHistory() []openaiMessage {
 	return messages
 }
 
-// loadSystemMessages reads all files in the tools/ directory and returns their contents as system messages
-func loadSystemMessages() ([]openaiMessage, error) {
-	var messages []openaiMessage
+// loadSystemMessagesAndTools reads files in the tools/ directory
+// and categorizes them as either system message (text.md) or tools
+func loadSystemMessagesAndTools() (openaiMessage, []openaiTool, error) {
+	var sysMsg openaiMessage
+	var toolsList []openaiTool
 	
 	err := filepath.Walk("tools", func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
@@ -78,28 +109,46 @@ func loadSystemMessages() ([]openaiMessage, error) {
 			return err
 		}
 		
-		// Add as system message
-		messages = append(messages, openaiMessage{
-			Role:    "system",
-			Content: string(content),
-		})
+		// Get the base filename
+		baseName := filepath.Base(path)
+		
+		// If it's text.md, it's the system message
+		if baseName == "text.md" {
+			sysMsg = openaiMessage{
+				Role:    "system",
+				Content: string(content),
+			}
+		} else {
+			// It's a tool
+			// Extract tool name from filename (remove .md extension)
+			toolName := strings.TrimSuffix(baseName, filepath.Ext(baseName))
+			
+			// Add as a tool
+			toolsList = append(toolsList, openaiTool{
+				Type: "function",
+				Function: openaiFunction{
+					Name:        toolName,
+					Description: string(content),
+				},
+			})
+		}
 		
 		return nil
 	})
 	
-	// If tools directory doesn't exist, just return empty slice without error
+	// If tools directory doesn't exist, just return empty values without error
 	if err != nil && !os.IsNotExist(err) {
-		return nil, err
+		return openaiMessage{}, nil, err
 	}
 	
-	return messages, nil
+	return sysMsg, toolsList, nil
 }
 
-// LoadSystemMessages loads system messages from the tools directory
+// LoadSystemMessages loads system messages and tools from the tools directory
 // This should be called once at startup
 func LoadSystemMessages() error {
 	var err error
-	systemMessages, err = loadSystemMessages()
+	systemMessage, tools, err = loadSystemMessagesAndTools()
 	return err
 }
 
@@ -112,11 +161,15 @@ func AskOpenAI(model, prompt string) (string, error) {
 		return "", errors.New("OPENAI_API_KEY environment variable not set")
 	}
 	
-	// Create messages array with system messages first
-	messages := make([]openaiMessage, len(systemMessages))
-	copy(messages, systemMessages)
+	// Create messages array starting with the system message
+	var messages []openaiMessage
 	
-	// Get conversation history from main.go
+	// Add the system message if it's not empty
+	if systemMessage.Content != "" {
+		messages = append(messages, systemMessage)
+	}
+	
+	// Get conversation history
 	historyMessages := getConversationHistory()
 	
 	// Append history messages
@@ -129,6 +182,7 @@ func AskOpenAI(model, prompt string) (string, error) {
 	reqBody := openaiRequest{
 		Model:    model,
 		Messages: messages,
+		Tools:    tools,
 	}
 	bodyBytes, _ := json.Marshal(&reqBody)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(bodyBytes))
@@ -155,8 +209,26 @@ func AskOpenAI(model, prompt string) (string, error) {
 	if len(out.Choices) == 0 {
 		return "", errors.New("no choices in OpenAI response")
 	}
+	
+	// Check if the response contains tool calls
+	if len(out.Choices[0].Message.ToolCalls) > 0 {
+		// For now, just return a message indicating which tools were called
+		var toolResponse strings.Builder
+		toolResponse.WriteString("Tool calls detected:\n")
+		
+		for _, toolCall := range out.Choices[0].Message.ToolCalls {
+			toolResponse.WriteString(fmt.Sprintf("- %s with arguments: %s\n", 
+				toolCall.Function.Name, 
+				string(toolCall.Function.Arguments)))
+		}
+		
+		return toolResponse.String(), nil
+	}
+	
+	// Return the regular content response if no tool calls
 	return out.Choices[0].Message.Content, nil
 }
+
 // UpdateConversationHistory updates the conversation history with a new entry
 func UpdateConversationHistory(raw, role string) {
 	conversationHistory = append(conversationHistory, ConversationEntry{
