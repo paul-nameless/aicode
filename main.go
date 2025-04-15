@@ -100,7 +100,7 @@ func handleCommand(input string, m *model) (bool, tea.Cmd) {
 			)
 			helpText := "# Available Commands\n- `/exit` - Quit the application\n- `/clear` - Clear all entries\n- `/help` - Show this help"
 			rendered, _ := renderer.Render(helpText)
-			
+
 			m.entries = append(m.entries, entry{
 				raw:      helpText,
 				rendered: rendered,
@@ -123,17 +123,13 @@ func (m model) View() string {
 	var s strings.Builder
 
 	// Display history of entries
-	for i, entry := range m.entries {
-		s.WriteString(fmt.Sprintf("--- Entry %d ---\n", i+1))
-		s.WriteString(fmt.Sprintf("Input: %s\n\n", entry.raw))
-		s.WriteString("Rendered:\n")
+	for _, entry := range m.entries {
 		s.WriteString(entry.rendered)
 		s.WriteString("\n")
 	}
 
 	// Display input field at the bottom
-	s.WriteString("\n----------------------------------------\n")
-	s.WriteString("(Type markdown and press Enter, Ctrl+C to quit)\n")
+	s.WriteString("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 	s.WriteString(fmt.Sprintf("%s\n", m.textInput.View()))
 
 	return s.String()
