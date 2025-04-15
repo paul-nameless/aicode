@@ -3,25 +3,32 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 )
+
+type entry struct {
+	raw      string
+	rendered string
+}
 
 type model struct {
 	textInput textinput.Model
-	inputs    []string
+	entries   []entry
 }
 
 func initialModel() model {
 	ti := textinput.New()
-	ti.Placeholder = "Type something and press enter..."
+	ti.Placeholder = "Type markdown and press enter..."
 	ti.Focus()
-	ti.Width = 40
+	ti.Width = 80
 
 	return model{
 		textInput: ti,
-		inputs:    []string{},
+		entries:   []entry{},
 	}
 }
 
@@ -39,23 +46,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case tea.KeyEnter:
-			// Get the current input value
 			input := m.textInput.Value()
+			if input == "" {
+				return m, nil
+			}
 
-			// Check if the input is a command
 			isCommand, cmdResult := handleCommand(input, &m)
 			if isCommand {
-				// If it was a command, we've already handled it
 				m.textInput.Reset()
 				return m, cmdResult
 			}
 
-			// Add it to our list of inputs
-			m.inputs = append(m.inputs, input)
+			renderer, _ := glamour.NewTermRenderer(
+				glamour.WithStandardStyle("dark"),
+				glamour.WithWordWrap(80),
+			)
 
-			// Clear the input field for next entry
+			rendered, err := renderer.Render(input)
+			if err != nil {
+				rendered = "Error rendering markdown\n"
+			}
+
+			m.entries = append(m.entries, entry{
+				raw:      input,
+				rendered: rendered,
+			})
+
 			m.textInput.Reset()
-
 			return m, nil
 		}
 	}
@@ -64,32 +81,38 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// handleCommand processes command inputs starting with '/'
-// Returns true if the input was a command, false otherwise
-// Also returns a tea.Cmd if needed for execution
 func handleCommand(input string, m *model) (bool, tea.Cmd) {
-	// Check if the input starts with a '/' to identify commands
 	if len(input) > 0 && input[0] == '/' {
-		cmd := input[1:] // Remove the '/' prefix
+		cmd := input[1:]
 
 		switch cmd {
 		case "exit":
-			// Exit the application
 			return true, tea.Quit
 
 		case "clear":
-			// Clear all previous inputs
-			m.inputs = []string{}
+			m.entries = []entry{}
 			return true, nil
 
 		case "help":
-			// Add a help message to the inputs
-			m.inputs = append(m.inputs, "Available commands: /exit, /clear, /help")
+			renderer, _ := glamour.NewTermRenderer(
+				glamour.WithStandardStyle("dark"),
+				glamour.WithWordWrap(80),
+			)
+			helpText := "# Available Commands\n- `/exit` - Quit the application\n- `/clear` - Clear all entries\n- `/help` - Show this help"
+			rendered, _ := renderer.Render(helpText)
+			
+			m.entries = append(m.entries, entry{
+				raw:      helpText,
+				rendered: rendered,
+			})
 			return true, nil
 
 		default:
-			// Unknown command
-			m.inputs = append(m.inputs, fmt.Sprintf("Unknown command: %s", cmd))
+			helpText := fmt.Sprintf("Unknown command: %s", cmd)
+			m.entries = append(m.entries, entry{
+				raw:      helpText,
+				rendered: helpText,
+			})
 			return true, nil
 		}
 	}
@@ -97,21 +120,20 @@ func handleCommand(input string, m *model) (bool, tea.Cmd) {
 }
 
 func (m model) View() string {
-	var s string
+	var s strings.Builder
 
-	// Show previous inputs
-	if len(m.inputs) > 0 {
-		for _, input := range m.inputs {
-			s += fmt.Sprintf(" %s\n\n", input)
-		}
+	s.WriteString(fmt.Sprintf("%s\n\n", m.textInput.View()))
+	s.WriteString("(Type markdown and press Enter, Ctrl+C to quit)\n\n")
+
+	for i, entry := range m.entries {
+		s.WriteString(fmt.Sprintf("--- Entry %d ---\n", i+1))
+		s.WriteString(fmt.Sprintf("Input: %s\n\n", entry.raw))
+		s.WriteString("Rendered:\n")
+		s.WriteString(entry.rendered)
+		s.WriteString("\n")
 	}
 
-	// Show current input field
-	s += fmt.Sprintf(
-		"%s\n\n(Press ctrl+c or ctrl+d to quit)\n",
-		m.textInput.View(),
-	)
-	return s
+	return s.String()
 }
 
 func main() {
