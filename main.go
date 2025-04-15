@@ -42,6 +42,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Get the current input value
 			input := m.textInput.Value()
 
+			// Check if the input is a command
+			isCommand, cmdResult := handleCommand(input, &m)
+			if isCommand {
+				// If it was a command, we've already handled it
+				m.textInput.Reset()
+				return m, cmdResult
+			}
+
 			// Add it to our list of inputs
 			m.inputs = append(m.inputs, input)
 
@@ -54,6 +62,38 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	m.textInput, cmd = m.textInput.Update(msg)
 	return m, cmd
+}
+
+// handleCommand processes command inputs starting with '/'
+// Returns true if the input was a command, false otherwise
+// Also returns a tea.Cmd if needed for execution
+func handleCommand(input string, m *model) (bool, tea.Cmd) {
+	// Check if the input starts with a '/' to identify commands
+	if len(input) > 0 && input[0] == '/' {
+		cmd := input[1:] // Remove the '/' prefix
+
+		switch cmd {
+		case "exit":
+			// Exit the application
+			return true, tea.Quit
+		
+		case "clear":
+			// Clear all previous inputs
+			m.inputs = []string{}
+			return true, nil
+		
+		case "help":
+			// Add a help message to the inputs
+			m.inputs = append(m.inputs, "Available commands: /exit, /clear, /help")
+			return true, nil
+		
+		default:
+			// Unknown command
+			m.inputs = append(m.inputs, fmt.Sprintf("Unknown command: %s", cmd))
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (m model) View() string {
@@ -73,6 +113,9 @@ func (m model) View() string {
 		"%s\n\n(Press ctrl+c or ctrl+d to quit)\n",
 		m.textInput.View(),
 	)
+
+	// Show command help
+	s += "\nCommands: /exit, /clear, /help\n"
 
 	return s
 }
