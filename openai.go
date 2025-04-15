@@ -30,6 +30,33 @@ type openaiResponse struct {
 	} `json:"error,omitempty"`
 }
 
+// ConversationEntry represents an entry in the conversation history
+type ConversationEntry struct {
+	raw  string
+	role string // "user" or "assistant"
+}
+
+// Global variable to store conversation history
+var conversationHistory []ConversationEntry
+
+// getConversationHistory returns the conversation history as OpenAI messages
+func getConversationHistory() []openaiMessage {
+	// This is a package-level variable that will be set from main.go
+	var messages []openaiMessage
+	
+	// Convert entries to OpenAI messages
+	for _, entry := range conversationHistory {
+		if entry.role == "user" || entry.role == "assistant" {
+			messages = append(messages, openaiMessage{
+				Role:    entry.role,
+				Content: entry.raw,
+			})
+		}
+	}
+	
+	return messages
+}
+
 // loadSystemMessages reads all files in the tools/ directory and returns their contents as system messages
 func loadSystemMessages() ([]openaiMessage, error) {
 	var messages []openaiMessage
@@ -82,8 +109,17 @@ func AskOpenAI(model, prompt string) (string, error) {
 		return "", err
 	}
 	
-	// Create messages array with system messages first, then user prompt
-	messages := append(systemMessages, openaiMessage{Role: "user", Content: prompt})
+	// Create messages array with system messages first
+	messages := systemMessages
+	
+	// Get conversation history from main.go
+	historyMessages := getConversationHistory()
+	
+	// Append history messages
+	messages = append(messages, historyMessages...)
+	
+	// Append the current user prompt
+	messages = append(messages, openaiMessage{Role: "user", Content: prompt})
 	
 	url := "https://api.openai.com/v1/chat/completions"
 	reqBody := openaiRequest{
@@ -116,4 +152,11 @@ func AskOpenAI(model, prompt string) (string, error) {
 		return "", errors.New("no choices in OpenAI response")
 	}
 	return out.Choices[0].Message.Content, nil
+}
+// UpdateConversationHistory updates the conversation history with a new entry
+func UpdateConversationHistory(raw, role string) {
+	conversationHistory = append(conversationHistory, ConversationEntry{
+		raw:  raw,
+		role: role,
+	})
 }

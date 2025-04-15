@@ -14,6 +14,7 @@ import (
 type entry struct {
 	raw      string
 	rendered string
+	role     string // "user" or "assistant"
 }
 
 type model struct {
@@ -96,10 +97,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				rendered = "> " + input
 			}
 
+			// Add entry to UI
 			m.entries = append(m.entries, entry{
 				raw:      input,
 				rendered: rendered,
+				role:     "user",
 			})
+			
+			// Update conversation history in openai.go
+			UpdateConversationHistory(input, "user")
 			
 			// Update viewport content
 			m.updateViewportContent()
@@ -113,6 +119,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return entry{
 						raw:      fmt.Sprintf("Error: %v", err),
 						rendered: fmt.Sprintf("Error: %v", err),
+						role:     "assistant",
 					}
 				}
 
@@ -124,12 +131,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return entry{
 					raw:      response,
 					rendered: renderedResponse,
+					role:     "assistant",
 				}
 			}
 		}
 	case entry:
 		// Handle the response from AskOpenAI
 		m.entries = append(m.entries, msg)
+		
+		// Update conversation history in openai.go
+		UpdateConversationHistory(msg.raw, msg.role)
 		m.updateViewportContent()
 		return m, nil
 	}
@@ -171,6 +182,7 @@ func handleCommand(input string, m *model) (bool, tea.Cmd) {
 			m.entries = append(m.entries, entry{
 				raw:      helpText,
 				rendered: rendered,
+				role:     "assistant", // Help text is from the assistant
 			})
 			m.updateViewportContent()
 			return true, nil
@@ -181,6 +193,7 @@ func handleCommand(input string, m *model) (bool, tea.Cmd) {
 		m.entries = append(m.entries, entry{
 			raw:      helpText,
 			rendered: helpText,
+			role:     "assistant", // Error messages are from the assistant
 		})
 		m.updateViewportContent()
 		return true, nil
