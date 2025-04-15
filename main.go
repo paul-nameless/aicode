@@ -85,26 +85,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			// Display user input first
+			renderer, _ := glamour.NewTermRenderer(
+				glamour.WithStandardStyle("dark"),
+				glamour.WithWordWrap(80),
+			)
+
+			rendered, err := renderer.Render("> " + input)
+			if err != nil {
+				rendered = "> " + input
+			}
+
+			m.entries = append(m.entries, entry{
+				raw:      input,
+				rendered: rendered,
+			})
+			
+			// Update viewport content
+			m.updateViewportContent()
+
 			// Send input to OpenAI API
 			return m, func() tea.Msg {
-				// Display user input first
-				renderer, _ := glamour.NewTermRenderer(
-					glamour.WithStandardStyle("dark"),
-					glamour.WithWordWrap(80),
-				)
-
-				rendered, err := renderer.Render("> " + input)
-				if err != nil {
-					rendered = "> " + input
-				}
-
-				m.entries = append(m.entries, entry{
-					raw:      input,
-					rendered: rendered,
-				})
-				
-				// Update viewport content
-				m.updateViewportContent()
 
 				// Send to OpenAI and get response
 				response, err := AskOpenAI("gpt-4.1-nano", input)
