@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 )
@@ -17,7 +18,9 @@ type entry struct {
 
 type model struct {
 	textInput textinput.Model
+	viewport  viewport.Model
 	entries   []entry
+	ready     bool
 }
 
 func initialModel() model {
@@ -29,17 +32,37 @@ func initialModel() model {
 	return model{
 		textInput: ti,
 		entries:   []entry{},
+		ready:     false,
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return textinput.Blink
+	return tea.Batch(textinput.Blink, tea.EnterAltScreen)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if !m.ready {
+			// Initialize the viewport now that we know the terminal dimensions
+			headerHeight := 0
+			footerHeight := 3 // Input field + divider
+			verticalMarginHeight := headerHeight + footerHeight
+			
+			m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
+			m.viewport.SetContent("")
+			m.ready = true
+		} else {
+			m.viewport.Width = msg.Width
+			m.viewport.Height = msg.Height - 3
+		}
+		
+		m.textInput.Width = msg.Width - 2
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyCtrlD:
@@ -79,6 +102,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					raw:      input,
 					rendered: rendered,
 				})
+				
+				// Update viewport content
+				m.updateViewportContent()
 
 				// Send to OpenAI and get response
 				response, err := AskOpenAI("gpt-4.1-nano", input)
@@ -89,11 +115,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 
-				renderedResponse := "\n" + response
-				// renderedResponse, err := renderer.Render(response)
-				// if err != nil {
-				// 	renderedResponse = response
-				// }
+				renderedResponse, err := renderer.Render(response)
+				if err != nil {
+					renderedResponse = "\n" + response
+				}
 
 				return entry{
 					raw:      response,
@@ -104,11 +129,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case entry:
 		// Handle the response from AskOpenAI
 		m.entries = append(m.entries, msg)
+		m.updateViewportContent()
 		return m, nil
 	}
 
+	// Handle viewport updates
+	if m.ready {
+		m.viewport, cmd = m.viewport.Update(msg)
+		cmds = append(cmds, cmd)
+	}
+
+	// Handle text input updates
 	m.textInput, cmd = m.textInput.Update(msg)
-	return m, cmd
+	cmds = append(cmds, cmd)
+
+	return m, tea.Batch(cmds...)
 }
 
 func handleCommand(input string, m *model) (bool, tea.Cmd) {
@@ -136,6 +171,7 @@ func handleCommand(input string, m *model) (bool, tea.Cmd) {
 				raw:      helpText,
 				rendered: rendered,
 			})
+			m.updateViewportContent()
 			return true, nil
 		}
 
@@ -145,20 +181,33 @@ func handleCommand(input string, m *model) (bool, tea.Cmd) {
 			raw:      helpText,
 			rendered: helpText,
 		})
+		m.updateViewportContent()
 		return true, nil
 	}
 	return false, nil
 }
 
-func (m model) View() string {
+// updateViewportContent updates the viewport's content with all entries
+func (m *model) updateViewportContent() {
 	var s strings.Builder
-
-	// Display history of entries
 	for _, entry := range m.entries {
 		s.WriteString(entry.rendered)
 	}
+	m.viewport.SetContent(s.String())
+	m.viewport.GotoBottom()
+}
 
-	// Display input field at the bottom
+func (m model) View() string {
+	if !m.ready {
+		return "Initializing..."
+	}
+
+	var s strings.Builder
+
+	// Display chat history in the viewport
+	s.WriteString(m.viewport.View())
+	
+	// Display input field at the bottom with a divider
 	s.WriteString("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 	s.WriteString(fmt.Sprintf("%s\n", m.textInput.View()))
 
@@ -166,7 +215,10 @@ func (m model) View() string {
 }
 
 func main() {
-	p := tea.NewProgram(initialModel())
+	p := tea.NewProgram(
+		initialModel(),
+		tea.WithAltScreen(),
+	)
 
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running program: %v\n", err)
