@@ -122,9 +122,7 @@ func handleCommand(input string, m *model) (bool, tea.Cmd) {
 func (m model) View() string {
 	var s strings.Builder
 
-	s.WriteString(fmt.Sprintf("%s\n\n", m.textInput.View()))
-	s.WriteString("(Type markdown and press Enter, Ctrl+C to quit)\n\n")
-
+	// Display history of entries
 	for i, entry := range m.entries {
 		s.WriteString(fmt.Sprintf("--- Entry %d ---\n", i+1))
 		s.WriteString(fmt.Sprintf("Input: %s\n\n", entry.raw))
@@ -132,6 +130,11 @@ func (m model) View() string {
 		s.WriteString(entry.rendered)
 		s.WriteString("\n")
 	}
+
+	// Display input field at the bottom
+	s.WriteString("\n----------------------------------------\n")
+	s.WriteString("(Type markdown and press Enter, Ctrl+C to quit)\n")
+	s.WriteString(fmt.Sprintf("%s\n", m.textInput.View()))
 
 	return s.String()
 }
