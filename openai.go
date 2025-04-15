@@ -36,8 +36,9 @@ type ConversationEntry struct {
 	role string // "user" or "assistant"
 }
 
-// Global variable to store conversation history
+// Global variables
 var conversationHistory []ConversationEntry
+var systemMessages []openaiMessage // Store system messages loaded at startup
 
 // getConversationHistory returns the conversation history as OpenAI messages
 func getConversationHistory() []openaiMessage {
@@ -94,6 +95,14 @@ func loadSystemMessages() ([]openaiMessage, error) {
 	return messages, nil
 }
 
+// LoadSystemMessages loads system messages from the tools directory
+// This should be called once at startup
+func LoadSystemMessages() error {
+	var err error
+	systemMessages, err = loadSystemMessages()
+	return err
+}
+
 // AskOpenAI sends a prompt to OpenAI's API and returns the response.
 // model: for example, "gpt-3.5-turbo" or "gpt-4"
 // prompt: your user input
@@ -103,14 +112,9 @@ func AskOpenAI(model, prompt string) (string, error) {
 		return "", errors.New("OPENAI_API_KEY environment variable not set")
 	}
 	
-	// Load system messages from tools directory
-	systemMessages, err := loadSystemMessages()
-	if err != nil {
-		return "", err
-	}
-	
 	// Create messages array with system messages first
-	messages := systemMessages
+	messages := make([]openaiMessage, len(systemMessages))
+	copy(messages, systemMessages)
 	
 	// Get conversation history from main.go
 	historyMessages := getConversationHistory()

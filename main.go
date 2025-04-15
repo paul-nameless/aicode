@@ -229,6 +229,11 @@ func (m model) View() string {
 }
 
 func main() {
+	// Load system messages at startup
+	if err := LoadSystemMessages(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to load system messages: %v\n", err)
+	}
+	
 	p := tea.NewProgram(
 		initialModel(),
 		tea.WithAltScreen(),
