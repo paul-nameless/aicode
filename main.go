@@ -51,11 +51,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			// Clear input immediately
+			m.textInput.Reset()
+
 			// Check if it's a special command
 			if len(input) > 0 && input[0] == '/' {
 				isCommand, cmdResult := handleCommand(input, &m)
 				if isCommand {
-					m.textInput.Reset()
 					return m, cmdResult
 				}
 			}
@@ -92,7 +94,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					renderedResponse = response
 				}
 
-				m.textInput.Reset()
 				return entry{
 					raw:      response,
 					rendered: renderedResponse,
