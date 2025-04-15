@@ -70,9 +70,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					glamour.WithWordWrap(80),
 				)
 
-				rendered, err := renderer.Render(input)
+				rendered, err := renderer.Render("> " + input)
 				if err != nil {
-					rendered = input
+					rendered = "> " + input
 				}
 
 				m.entries = append(m.entries, entry{
@@ -89,10 +89,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 
-				renderedResponse, err := renderer.Render(response)
-				if err != nil {
-					renderedResponse = response
-				}
+				renderedResponse := response
+				// renderedResponse, err := renderer.Render(response)
+				// if err != nil {
+				// 	renderedResponse = response
+				// }
 
 				return entry{
 					raw:      response,
