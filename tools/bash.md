@@ -24,6 +24,31 @@ Before executing the command, please follow these steps:
    - Provide the processed output of the command.
    - If any errors occurred during execution, include those in the output.
 
+```json
+{
+  "name": "Bash",
+  "description": "Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.",
+  "parameters": {
+    "type": "object",
+    "required": ["command"],
+    "properties": {
+      "command": {
+        "type": "string",
+        "description": "The command to execute"
+      },
+      "timeout": {
+        "type": "number",
+        "description": "Optional timeout in milliseconds (max 600000)"
+      },
+      "description": {
+        "type": "string",
+        "description": "Clear, concise description of what this command does in 5-10 words"
+      }
+    }
+  }
+}
+```
+
 ## Usage notes:
 
 - The command argument is required.

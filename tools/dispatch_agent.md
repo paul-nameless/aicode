@@ -6,6 +6,23 @@ Launch a new agent that has access to the following tools: GlobTool, GrepTool, L
 - If you want to read a specific file path, use the View or GlobTool tool instead of the Agent tool, to find the match more quickly
 - If you are searching for a specific class definition like "class Foo", use the GlobTool tool instead, to find the match more quickly
 
+```json
+{
+  "name": "dispatch_agent",
+  "description": "Launch a new agent that has access to the following tools: View, GlobTool, GrepTool, LS, ReadNotebook.",
+  "parameters": {
+    "type": "object",
+    "required": ["prompt"],
+    "properties": {
+      "prompt": {
+        "type": "string",
+        "description": "The task for the agent to perform"
+      }
+    }
+  }
+}
+```
+
 ## Usage notes:
 
 1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses
