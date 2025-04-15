@@ -254,14 +254,32 @@ func AskOpenAI(model, prompt string) (string, error) {
 	
 	// Check if the response contains tool calls
 	if len(out.Choices[0].Message.ToolCalls) > 0 {
-		// For now, just return a message indicating which tools were called
 		var toolResponse strings.Builder
-		toolResponse.WriteString("Tool calls detected:\n")
+		toolResponse.WriteString("Tool calls detected:\n\n")
 		
 		for _, toolCall := range out.Choices[0].Message.ToolCalls {
-			toolResponse.WriteString(fmt.Sprintf("- %s with arguments: %s\n", 
-				toolCall.Function.Name, 
+			toolName := toolCall.Function.Name
+			
+			toolResponse.WriteString(fmt.Sprintf("Tool: %s\nArguments: %s\n", 
+				toolName, 
 				string(toolCall.Function.Arguments)))
+			
+			// Execute the tool based on the name
+			var result string
+			var err error
+			
+			switch toolName {
+			case "GrepTool":
+				result, err = ExecuteGrepTool(toolCall.Function.Arguments)
+				if err != nil {
+					result = fmt.Sprintf("Error executing GrepTool: %v", err)
+				}
+			default:
+				// For now, other tools aren't implemented yet
+				result = fmt.Sprintf("Tool %s is not implemented yet.", toolName)
+			}
+			
+			toolResponse.WriteString(fmt.Sprintf("\nResult:\n%s\n\n", result))
 		}
 		
 		return toolResponse.String(), nil
