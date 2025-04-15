@@ -76,17 +76,17 @@ func handleCommand(input string, m *model) (bool, tea.Cmd) {
 		case "exit":
 			// Exit the application
 			return true, tea.Quit
-		
+
 		case "clear":
 			// Clear all previous inputs
 			m.inputs = []string{}
 			return true, nil
-		
+
 		case "help":
 			// Add a help message to the inputs
 			m.inputs = append(m.inputs, "Available commands: /exit, /clear, /help")
 			return true, nil
-		
+
 		default:
 			// Unknown command
 			m.inputs = append(m.inputs, fmt.Sprintf("Unknown command: %s", cmd))
@@ -101,11 +101,9 @@ func (m model) View() string {
 
 	// Show previous inputs
 	if len(m.inputs) > 0 {
-		s += "Previous inputs:\n"
-		for i, input := range m.inputs {
-			s += fmt.Sprintf("%d. %s\n", i+1, input)
+		for _, input := range m.inputs {
+			s += fmt.Sprintf(" %s\n\n", input)
 		}
-		s += "\n"
 	}
 
 	// Show current input field
@@ -113,10 +111,6 @@ func (m model) View() string {
 		"%s\n\n(Press ctrl+c or ctrl+d to quit)\n",
 		m.textInput.View(),
 	)
-
-	// Show command help
-	s += "\nCommands: /exit, /clear, /help\n"
-
 	return s
 }
 
