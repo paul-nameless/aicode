@@ -154,7 +154,6 @@ func (m model) View() string {
 	// Display history of entries
 	for _, entry := range m.entries {
 		s.WriteString(entry.rendered)
-		s.WriteString("\n")
 	}
 
 	// Display input field at the bottom
