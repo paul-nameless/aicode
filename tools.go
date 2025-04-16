@@ -232,6 +232,14 @@ func searchFiles(rootPath string, pattern *regexp.Regexp, includePattern string)
 	return results, err
 }
 
+// FetchToolParams represents the parameters for the FetchTool
+type FetchToolParams struct {
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Method  string            `json:"method,omitempty"`
+	Data    string            `json:"data,omitempty"`
+}
+
 // ToolCallResult represents the result of a tool call
 type ToolCallResult struct {
 	CallID string
@@ -287,6 +295,11 @@ func HandleToolCallsWithResults(toolCalls []toolCall) (string, []ToolCallResult,
 			result, err = ExecuteViewTool(toolCall.Function.Arguments)
 			if err != nil {
 				result = fmt.Sprintf("Error executing View: %v", err)
+			}
+		case "Fetch":
+			result, err = ExecuteFetchTool(toolCall.Function.Arguments)
+			if err != nil {
+				result = fmt.Sprintf("Error executing Fetch: %v", err)
 			}
 		default:
 			// For now, other tools aren't implemented yet
@@ -660,6 +673,76 @@ func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
 	sb.WriteString(result)
 
 	return sb.String(), nil
+}
+
+// ExecuteFetchTool fetches content from a URL using curl
+func ExecuteFetchTool(paramsJSON json.RawMessage) (string, error) {
+	fmt.Printf("DEBUG - Raw fetch params received: %s\n", string(paramsJSON))
+
+	// Try multiple approaches to handle potential JSON format issues
+	var params FetchToolParams
+	err := json.Unmarshal(paramsJSON, &params)
+
+	// Try to handle string-encoded JSON if direct unmarshaling fails
+	if err != nil {
+		var strArg string
+		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
+			// We got a string, check if it's JSON
+			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
+				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
+				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
+					// Successfully parsed
+					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
+				} else {
+					// Both approaches failed
+					return "", fmt.Errorf("failed to parse fetch tool parameters: %v (from string: %v)", err, err3)
+				}
+			} else {
+				// It's a simple string, assume it's just the URL
+				params.URL = strArg
+				fmt.Printf("DEBUG - Treating as simple URL: %s\n", strArg)
+			}
+		} else {
+			// Both approaches failed
+			return "", fmt.Errorf("failed to parse fetch tool parameters: %v", err)
+		}
+	}
+
+	// Validate parameters
+	if params.URL == "" {
+		return "", fmt.Errorf("url parameter is required")
+	}
+
+	// Build the curl command
+	curlCmd := "curl -s"
+
+	// Add HTTP method if specified
+	if params.Method != "" {
+		curlCmd += fmt.Sprintf(" -X %s", params.Method)
+	}
+
+	// Add headers if specified
+	for key, value := range params.Headers {
+		curlCmd += fmt.Sprintf(" -H '%s: %s'", 
+			strings.ReplaceAll(key, "'", "'\\''"), 
+			strings.ReplaceAll(value, "'", "'\\''"))
+	}
+
+	// Add data if specified for POST, PUT, etc.
+	if params.Data != "" {
+		curlCmd += fmt.Sprintf(" -d '%s'", strings.ReplaceAll(params.Data, "'", "'\\''"))
+	}
+
+	// Add URL
+	curlCmd += fmt.Sprintf(" '%s'", strings.ReplaceAll(params.URL, "'", "'\\''"))
+
+	// Execute the curl command
+	result, err := executeCommand(curlCmd, 0)
+	if err != nil {
+		return "", fmt.Errorf("error executing fetch command: %v", err)
+	}
+
+	return result, nil
 }
 
 // isImageFile checks if a file is an image based on its extension
