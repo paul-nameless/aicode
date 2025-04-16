@@ -15,8 +15,7 @@ import (
 
 // Global variables
 var conversationHistory []ConversationEntry
-var systemMessage openaiMessage // Store the system message (text.md)
-var tools []openaiTool          // Store the tools loaded at startup
+var tools []openaiTool // Store the tools loaded at startup
 
 type openaiRequest struct {
 	Model    string        `json:"model"`
@@ -77,10 +76,8 @@ func getConversationHistory() []openaiMessage {
 	return messages
 }
 
-// loadSystemMessagesAndTools reads files in the tools/ directory
-// and categorizes them as either system message (text.md) or tools
-func loadSystemMessagesAndTools() (openaiMessage, []openaiTool, error) {
-	var sysMsg openaiMessage
+// loadTools reads files in the tools/ directory and loads them as tools
+func loadTools() ([]openaiTool, error) {
 	var toolsList []openaiTool
 
 	err := filepath.Walk("tools", func(path string, info fs.FileInfo, err error) error {
@@ -95,7 +92,7 @@ func loadSystemMessagesAndTools() (openaiMessage, []openaiTool, error) {
 
 		// Get the base filename
 		baseName := filepath.Base(path)
-		
+
 		// Skip dispatch_agent.md
 		if baseName == "dispatch_agent.md" {
 			return nil
@@ -109,84 +106,89 @@ func loadSystemMessagesAndTools() (openaiMessage, []openaiTool, error) {
 
 		contentStr := string(content)
 
-		// If it's text.md, it's the system message
-		if baseName == "text.md" {
-			sysMsg = openaiMessage{
-				Role:    "system",
-				Content: contentStr,
-			}
-		} else {
-			// It's a tool - extract JSON schema if available
-			// Extract tool name from filename (remove .md extension)
-			toolName := strings.TrimSuffix(baseName, filepath.Ext(baseName))
+		// Extract tool name from filename (remove .md extension)
+		toolName := strings.TrimSuffix(baseName, filepath.Ext(baseName))
 
-			// Look for JSON schema between triple backticks
-			description := contentStr
+		// Look for JSON schema between triple backticks
+		description := contentStr
 
-			// Find the JSON schema section
-			jsonSchemaStart := strings.Index(contentStr, "```json")
-			if jsonSchemaStart != -1 {
-				// Find the end of the JSON block
-				schemaText := contentStr[jsonSchemaStart+7:]
-				endMarkerIdx := strings.Index(schemaText, "```")
+		// Find the JSON schema section
+		jsonSchemaStart := strings.Index(contentStr, "```json")
+		if jsonSchemaStart != -1 {
+			// Find the end of the JSON block
+			schemaText := contentStr[jsonSchemaStart+7:]
+			endMarkerIdx := strings.Index(schemaText, "```")
 
-				if endMarkerIdx != -1 {
-					// Extract and parse the JSON schema
-					jsonSchema := schemaText[:endMarkerIdx]
+			if endMarkerIdx != -1 {
+				// Extract and parse the JSON schema
+				jsonSchema := schemaText[:endMarkerIdx]
 
-					// Attempt to parse the JSON
-					var toolSchema struct {
-						Name        string          `json:"name"`
-						Description string          `json:"description"`
-						Parameters  json.RawMessage `json:"parameters"`
-					}
+				// Attempt to parse the JSON
+				var toolSchema struct {
+					Name        string          `json:"name"`
+					Description string          `json:"description"`
+					Parameters  json.RawMessage `json:"parameters"`
+				}
 
-					if err := json.Unmarshal([]byte(jsonSchema), &toolSchema); err == nil {
+				if err := json.Unmarshal([]byte(jsonSchema), &toolSchema); err == nil {
 
-						// Successfully parsed the schema
-						toolsList = append(toolsList, openaiTool{
-							Type: "function",
-							Function: openaiFunction{
-								Name:        toolSchema.Name,
-								Description: toolSchema.Description,
-								Parameters:  toolSchema.Parameters,
-							},
-						})
-						return nil // Skip to the next file
-					} else {
-						fmt.Printf("Failed to parse JSON schema for tool %s: %v\n", toolName, err)
-					}
+					// Successfully parsed the schema
+					toolsList = append(toolsList, openaiTool{
+						Type: "function",
+						Function: openaiFunction{
+							Name:        toolSchema.Name,
+							Description: toolSchema.Description,
+							Parameters:  toolSchema.Parameters,
+						},
+					})
+					return nil // Skip to the next file
+				} else {
+					fmt.Printf("Failed to parse JSON schema for tool %s: %v\n", toolName, err)
 				}
 			}
-
-			// If JSON parsing failed or no JSON schema found, use the name and description approach
-			toolsList = append(toolsList, openaiTool{
-				Type: "function",
-				Function: openaiFunction{
-					Name:        toolName,
-					Description: description,
-				},
-			})
 		}
+
+		// If JSON parsing failed or no JSON schema found, use the name and description approach
+		toolsList = append(toolsList, openaiTool{
+			Type: "function",
+			Function: openaiFunction{
+				Name:        toolName,
+				Description: description,
+			},
+		})
 
 		return nil
 	})
 
 	// If tools directory doesn't exist, just return empty values without error
 	if err != nil && !os.IsNotExist(err) {
-		return openaiMessage{}, nil, err
+		return nil, err
 	}
 
 	fmt.Printf("Loaded %d tools from agent\n", len(toolsList))
-	return sysMsg, toolsList, nil
+	return toolsList, nil
 }
 
-// LoadSystemMessages loads system messages and tools from the tools directory
+// LoadSystemMessages loads system messages and tools
 // This should be called once at startup
 func LoadSystemMessages() error {
+	// Load tools
 	var err error
-	systemMessage, tools, err = loadSystemMessagesAndTools()
-	return err
+	tools, err = loadTools()
+	if err != nil {
+		return err
+	}
+
+	// Load system prompt from prompts/system.md
+	systemContent, err := os.ReadFile("prompts/system.md")
+	if err != nil {
+		return fmt.Errorf("failed to read system.md: %v", err)
+	}
+
+	// Add system message to conversation history
+	UpdateConversationHistory(string(systemContent), "system")
+
+	return nil
 }
 
 // ToolCallMessage represents a message with a tool call
@@ -212,19 +214,8 @@ func AskLlm(model, prompt string) (string, error) {
 		return "", errors.New("OPENAI_API_KEY environment variable not set")
 	}
 
-	// Create messages array starting with the system message
-	var messages []openaiMessage
-
-	// Add the system message if it's not empty
-	if systemMessage.Content != "" {
-		messages = append(messages, systemMessage)
-	}
-
-	// Get conversation history
-	historyMessages := getConversationHistory()
-
-	// Append history messages
-	messages = append(messages, historyMessages...)
+	// Get conversation history (which now includes the system message)
+	messages := getConversationHistory()
 
 	// Append the current user prompt
 	messages = append(messages, openaiMessage{Role: "user", Content: prompt})
