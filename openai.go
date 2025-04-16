@@ -233,81 +233,106 @@ func AskLlm(model, prompt string) (string, error) {
 
 	// Check if the response contains tool calls
 	if len(out.Choices[0].Message.ToolCalls) > 0 {
-		toolCallsResult, toolResults, err := HandleToolCallsWithResults(out.Choices[0].Message.ToolCalls)
-		if err != nil {
-			return "", err
-		}
-
-		// If we have tool calls and results, send a follow-up request
-		if len(toolResults) > 0 {
-			// Create a new set of messages with the tool results
-			var followupMessages []interface{}
-
-			// Copy all previous messages (convert openaiMessage to map to ensure proper serialization)
-			for _, msg := range messages {
-				followupMessages = append(followupMessages, map[string]interface{}{
-					"role":    msg.Role,
-					"content": msg.Content,
-				})
-			}
-
-			// Add assistant message with tool calls
-			followupMessages = append(followupMessages, map[string]interface{}{
-				"role":       "assistant",
-				"tool_calls": out.Choices[0].Message.ToolCalls,
+		// Initialize conversation for tool calls
+		var conversationMessages []interface{}
+		
+		// Copy all previous messages
+		for _, msg := range messages {
+			conversationMessages = append(conversationMessages, map[string]interface{}{
+				"role":    msg.Role,
+				"content": msg.Content,
 			})
-
+		}
+		
+		// Maximum number of iterations to prevent infinite loops
+		maxIterations := 100
+		currentIteration := 0
+		
+		// Continue processing tool calls until there are none left or we hit the max iterations
+		currentResponse := out
+		for len(currentResponse.Choices[0].Message.ToolCalls) > 0 && currentIteration < maxIterations {
+			currentIteration++
+			
+			// Process the current tool calls
+			toolCallsResult, toolResults, err := HandleToolCallsWithResults(currentResponse.Choices[0].Message.ToolCalls)
+			if err != nil {
+				return "", err
+			}
+			
+			// If we don't have any tool results, just return the tool calls result
+			if len(toolResults) == 0 {
+				return toolCallsResult, nil
+			}
+			
+			// Add assistant message with tool calls
+			conversationMessages = append(conversationMessages, map[string]interface{}{
+				"role":       "assistant",
+				"tool_calls": currentResponse.Choices[0].Message.ToolCalls,
+			})
+			
 			// Add tool results
 			for _, result := range toolResults {
-				followupMessages = append(followupMessages, map[string]interface{}{
+				conversationMessages = append(conversationMessages, map[string]interface{}{
 					"role":         "tool",
 					"tool_call_id": result.CallID,
 					"content":      result.Output,
 				})
 			}
-
+			
 			// Make a follow-up request with tool results
 			followupReqBody := openaiRequest{
 				Model:    model,
-				Messages: followupMessages,
+				Messages: conversationMessages,
 				Tools:    tools,
 			}
-
+			
 			followupBodyBytes, _ := json.Marshal(&followupReqBody)
 			followupReq, err := http.NewRequest("POST", url, bytes.NewBuffer(followupBodyBytes))
 			if err != nil {
 				return toolCallsResult, nil // Fall back to just showing tool calls result
 			}
-
+			
 			followupReq.Header.Set("Content-Type", "application/json")
 			followupReq.Header.Set("Authorization", "Bearer "+apiKey)
-
+			
 			followupResp, err := http.DefaultClient.Do(followupReq)
 			if err != nil {
 				return toolCallsResult, nil // Fall back to just showing tool calls result
 			}
-			defer followupResp.Body.Close()
-
+			
 			followupBody, _ := io.ReadAll(followupResp.Body)
+			followupResp.Body.Close()
+			
 			var followupOut openaiResponse
-
 			if err := json.Unmarshal(followupBody, &followupOut); err != nil {
 				return toolCallsResult, nil // Fall back to just showing tool calls result
 			}
-
+			
 			if followupOut.Error != nil {
 				return toolCallsResult, nil // Fall back to just showing tool calls result
 			}
-
+			
 			if len(followupOut.Choices) == 0 {
 				return toolCallsResult, nil // Fall back to just showing tool calls result
 			}
-
-			// Return the model's response after processing the tool results
-			return followupOut.Choices[0].Message.Content, nil
+			
+			// Update the current response for the next iteration
+			currentResponse = followupOut
+			
+			// If there are no more tool calls, we're done
+			if len(currentResponse.Choices[0].Message.ToolCalls) == 0 {
+				return currentResponse.Choices[0].Message.Content, nil
+			}
 		}
-
-		return toolCallsResult, nil
+		
+		// If we've reached the maximum number of iterations, return the last response
+		if currentIteration >= maxIterations {
+			return fmt.Sprintf("Reached maximum number of tool call iterations (%d). Last response: %s", 
+				maxIterations, currentResponse.Choices[0].Message.Content), nil
+		}
+		
+		// Return the final response after all tool calls are processed
+		return currentResponse.Choices[0].Message.Content, nil
 	}
 
 	// Return the regular content response if no tool calls

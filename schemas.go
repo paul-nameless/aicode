@@ -31,8 +31,6 @@ var fetchToolFile string
 //go:embed tools/grep.md
 var grepToolFile string
 
-//go:embed tools/text.md
-var textToolFile string
 
 // Tool descriptions loaded from markdown files
 var (
@@ -45,7 +43,6 @@ var (
 	DispatchAgentDescription = dispatchAgentFile
 	FetchToolDescription     = fetchToolFile
 	GrepToolDescription      = grepToolFile
-	TextToolDescription      = textToolFile
 )
 
 // JSON schemas for tools

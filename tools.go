@@ -240,6 +240,14 @@ type FetchToolParams struct {
 	Data    string            `json:"data,omitempty"`
 }
 
+// EditToolParams represents the parameters for the EditTool
+type EditToolParams struct {
+	FilePath             string `json:"file_path"`
+	OldString            string `json:"old_string"`
+	NewString            string `json:"new_string"`
+	ExpectedReplacements int    `json:"expected_replacements,omitempty"`
+}
+
 // ToolCallResult represents the result of a tool call
 type ToolCallResult struct {
 	CallID string
@@ -295,6 +303,11 @@ func HandleToolCallsWithResults(toolCalls []toolCall) (string, []ToolCallResult,
 			result, err = ExecuteViewTool(toolCall.Function.Arguments)
 			if err != nil {
 				result = fmt.Sprintf("Error executing View: %v", err)
+			}
+		case "Edit":
+			result, err = ExecuteEditTool(toolCall.Function.Arguments)
+			if err != nil {
+				result = fmt.Sprintf("Error executing Edit: %v", err)
 			}
 		case "Fetch":
 			result, err = ExecuteFetchTool(toolCall.Function.Arguments)
@@ -753,6 +766,119 @@ func isImageFile(filePath string) bool {
 		".bmp": true, ".tiff": true, ".webp": true, ".svg": true,
 	}
 	return imageExts[ext]
+}
+
+// ExecuteEditTool edits a file by replacing old_string with new_string
+func ExecuteEditTool(paramsJSON json.RawMessage) (string, error) {
+	fmt.Printf("DEBUG - Raw edit params received: %s\n", string(paramsJSON))
+
+	// Try multiple approaches to handle potential JSON format issues
+	var params EditToolParams
+	err := json.Unmarshal(paramsJSON, &params)
+
+	// Try to handle string-encoded JSON if direct unmarshaling fails
+	if err != nil {
+		var strArg string
+		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
+			// We got a string, check if it's JSON
+			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
+				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
+				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
+					// Successfully parsed
+					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
+				} else {
+					// Both approaches failed
+					return "", fmt.Errorf("failed to parse edit tool parameters: %v (from string: %v)", err, err3)
+				}
+			} else {
+				// It's not a simple string parameter we can handle
+				return "", fmt.Errorf("failed to parse edit tool parameters: %v", err)
+			}
+		} else {
+			// Both approaches failed
+			return "", fmt.Errorf("failed to parse edit tool parameters: %v", err)
+		}
+	}
+
+	// Validate parameters
+	if params.FilePath == "" {
+		return "", fmt.Errorf("file_path parameter is required")
+	}
+
+	// Handle relative paths by joining with current directory if not absolute
+	if !strings.HasPrefix(params.FilePath, "/") {
+		currentDir, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("failed to get current directory: %v", err)
+		}
+		params.FilePath = filepath.Join(currentDir, params.FilePath)
+		fmt.Printf("DEBUG - Converted to absolute path: %s\n", params.FilePath)
+	}
+
+	// For creating a new file, old_string can be empty
+	if params.NewString == "" {
+		return "", fmt.Errorf("new_string parameter is required")
+	}
+
+	// Check if the file exists (for edits of existing files)
+	fileInfo, err := os.Stat(params.FilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// If old_string is empty, create a new file
+			if params.OldString == "" {
+				// Make sure the directory exists
+				dir := filepath.Dir(params.FilePath)
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return "", fmt.Errorf("failed to create directory %s: %v", dir, err)
+				}
+
+				// Write the new file
+				if err := os.WriteFile(params.FilePath, []byte(params.NewString), 0644); err != nil {
+					return "", fmt.Errorf("failed to create file: %v", err)
+				}
+
+				return fmt.Sprintf("Created new file: %s", params.FilePath), nil
+			}
+			return "", fmt.Errorf("file does not exist: %s", params.FilePath)
+		}
+		return "", fmt.Errorf("error accessing file: %v", err)
+	}
+
+	// Check if it's a directory
+	if fileInfo.IsDir() {
+		return "", fmt.Errorf("%s is a directory, not a file", params.FilePath)
+	}
+
+	// Read the file content
+	content, err := os.ReadFile(params.FilePath)
+	if err != nil {
+		return "", fmt.Errorf("error reading file: %v", err)
+	}
+
+	// Default expected replacements is 1 if not specified
+	expectedReplacements := 1
+	if params.ExpectedReplacements > 0 {
+		expectedReplacements = params.ExpectedReplacements
+	}
+
+	// Perform the replacement
+	contentStr := string(content)
+	count := strings.Count(contentStr, params.OldString)
+
+	// Check that we're replacing exactly the expected number of occurrences
+	if count != expectedReplacements {
+		return "", fmt.Errorf("found %d occurrences of the old string, but expected %d", count, expectedReplacements)
+	}
+
+	// Replace the old string with the new string
+	newContent := strings.Replace(contentStr, params.OldString, params.NewString, expectedReplacements)
+
+	// Write the updated content back to the file
+	if err := os.WriteFile(params.FilePath, []byte(newContent), fileInfo.Mode()); err != nil {
+		return "", fmt.Errorf("error writing to file: %v", err)
+	}
+
+	return fmt.Sprintf("Successfully edited file %s, replacing %d occurrence(s) of old_string with new_string.", params.FilePath, expectedReplacements), nil
 }
 
 // countLines counts the number of lines in a string
