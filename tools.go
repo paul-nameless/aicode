@@ -319,7 +319,7 @@ func executeCommand(command string, timeout int) (string, error) {
 	return result, nil
 }
 
-// ExecuteFindFilesTool performs file pattern matching using the find command with path patterns
+// ExecuteFindFilesTool performs file pattern matching using the fd command with path patterns
 func ExecuteFindFilesTool(paramsJSON json.RawMessage) (string, error) {
 	fmt.Printf("DEBUG - Raw glob params received: %s\n", string(paramsJSON))
 
@@ -370,9 +370,9 @@ func ExecuteFindFilesTool(paramsJSON json.RawMessage) (string, error) {
 	escapedPattern := strings.ReplaceAll(params.Pattern, "'", "'\\''")
 	escapedPath := strings.ReplaceAll(params.Path, "'", "'\\''")
 
-	// Construct the find command
-	cmd := fmt.Sprintf("find '%s' -type f -path '*%s'",
-		escapedPath, escapedPattern)
+	// Construct the fd command with glob pattern
+	cmd := fmt.Sprintf("fd --glob '%s' '%s'",
+		escapedPattern, escapedPath)
 
 	// Execute the command
 	result, err := executeCommand(cmd, 0)
