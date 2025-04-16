@@ -177,6 +177,7 @@ func loadSystemMessagesAndTools() (openaiMessage, []openaiTool, error) {
 		return openaiMessage{}, nil, err
 	}
 
+	fmt.Printf("Loaded %d tools from agent\n", len(toolsList))
 	return sysMsg, toolsList, nil
 }
 
