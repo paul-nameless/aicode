@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -262,6 +263,47 @@ func runSimpleMode(prompt string) {
 	fmt.Println(response)
 }
 
+// runNonInteractiveMode reads user input in a loop until Ctrl+C/D
+func runInteractiveMode() {
+	// Get model from environment variable or use default
+	model := os.Getenv("OPENAI_MODEL")
+	if model == "" {
+		model = defaultModel
+
+	}
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Print("> ")
+		if !scanner.Scan() {
+			// EOF (Ctrl+D) detected
+			break
+		}
+
+		input := scanner.Text()
+		if input == "" {
+			continue
+		}
+
+		// Send to OpenAI and get response
+		UpdateConversationHistory(input, "user")
+		messages := getConversationHistory()
+
+		response, err := AskLlm(model, messages)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			continue
+		}
+
+		// Print the response
+		fmt.Println(response)
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 func main() {
 	// Parse command line flags
 	quietFlag := flag.Bool("q", false, "Run in simple mode with a single prompt")
@@ -286,6 +328,9 @@ func main() {
 		prompt := strings.Join(args, " ")
 		runSimpleMode(prompt)
 		return
+	} else {
+		runInteractiveMode()
+		os.Exit(1)
 	}
 
 	// Run the fancy TUI mode

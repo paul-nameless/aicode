@@ -10,7 +10,7 @@ tasks:
     - go build . && OPENAI_API_KEY=$(pass show i/openai.com-api-key| head -n 1) ./aicode -q "grep ai"
 
   r:
-    - go build . && OPENAI_API_KEY=$(pass show i/openai.com-api-key| head -n 1) ./aicode -q {{.CLI_ARGS}}
+    - go build . && OPENAI_API_KEY=$(pass show i/openai.com-api-key| head -n 1) ./aicode {{.CLI_ARGS}}
 
   build:
     - go build .

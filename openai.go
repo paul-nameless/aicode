@@ -112,7 +112,6 @@ func loadTools() ([]openaiTool, error) {
 		}
 	}
 
-	fmt.Printf("Loaded %d tools from schemas\n", len(toolsList))
 	return toolsList, nil
 }
 
