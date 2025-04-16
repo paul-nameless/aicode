@@ -12,6 +12,8 @@ import (
 	"github.com/charmbracelet/glamour"
 )
 
+const defaultModel = "gpt-4.1-nano"
+
 type entry struct {
 	raw      string
 	rendered string
@@ -113,9 +115,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Send input to OpenAI API
 			return m, func() tea.Msg {
+				// Get model from environment variable or use default
+				model := os.Getenv("OPENAI_MODEL")
+				if model == "" {
+					model = defaultModel
+				}
 
 				// Send to OpenAI and get response
-				response, err := AskLlm("gpt-4.1-nano", input)
+				response, err := AskLlm(model, input)
 				if err != nil {
 					return entry{
 						raw:      fmt.Sprintf("Error: %v", err),
@@ -234,8 +241,14 @@ func runSimpleMode(prompt string) {
 	// Update conversation history with the user prompt
 	UpdateConversationHistory(prompt, "user")
 
+	// Get model from environment variable or use default
+	model := os.Getenv("OPENAI_MODEL")
+	if model == "" {
+		model = defaultModel
+	}
+
 	// Send to OpenAI and get response
-	response, err := AskLlm("gpt-4.1-nano", prompt)
+	response, err := AskLlm(model, prompt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
