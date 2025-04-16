@@ -627,7 +627,7 @@ func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
 	var cmd string
 	if params.Offset > 0 {
 		// Use tail and head to get lines starting from offset with limit
-		cmd = fmt.Sprintf("tail -n +%d '%s' | head -n %d", 
+		cmd = fmt.Sprintf("tail -n +%d '%s' | head -n %d",
 			params.Offset, escapedPath, params.Limit)
 	} else {
 		// Just use head to get the first N lines
@@ -643,14 +643,14 @@ func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
 	// Format the output
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("File: %s\n", params.FilePath))
-	
+
 	if params.Offset > 0 {
-		sb.WriteString(fmt.Sprintf("Lines %d to %d:\n\n", 
+		sb.WriteString(fmt.Sprintf("Lines %d to %d:\n\n",
 			params.Offset, params.Offset+min(params.Limit, countLines(result))-1))
 	} else {
 		sb.WriteString(fmt.Sprintf("First %d lines:\n\n", min(params.Limit, countLines(result))))
 	}
-	
+
 	sb.WriteString(result)
 
 	return sb.String(), nil
