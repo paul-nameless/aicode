@@ -250,9 +250,9 @@ func main() {
 	quietFlag := flag.Bool("q", false, "Run in simple mode with a single prompt")
 	flag.Parse()
 
-	// Load system messages at startup
-	if err := LoadSystemMessages(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to load system messages: %v\n", err)
+	// Load context at startup
+	if err := LoadContext(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to load context: %v\n", err)
 	}
 
 	// Check if quiet flag is set

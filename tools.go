@@ -62,7 +62,7 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 
 	// Clean up the JSON by removing any tab characters that might cause issues
 	cleanJSON := strings.ReplaceAll(string(paramsJSON), "\t", "")
-	
+
 	// Try multiple approaches to handle potential JSON format issues
 
 	// 1. Try direct unmarshaling first
@@ -127,7 +127,7 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 
 	// Clean up the command by removing any tab characters that might cause issues
 	rgCmd = strings.ReplaceAll(rgCmd, "\t", "")
-	
+
 	// Execute the ripgrep command
 	result, err := executeCommand(rgCmd, 0)
 	return result, nil
@@ -667,7 +667,7 @@ func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
 		sb.WriteString(fmt.Sprintf("Lines %d to %d:\n\n",
 			params.Offset, params.Offset+min(params.Limit, countLines(result))-1))
 	} else {
-		sb.WriteString(fmt.Sprintf("First %d lines:\n\n", min(params.Limit, countLines(result))))
+		// sb.WriteString(fmt.Sprintf("First %d lines:\n\n", min(params.Limit, countLines(result))))
 	}
 
 	sb.WriteString(result)
@@ -723,8 +723,8 @@ func ExecuteFetchTool(paramsJSON json.RawMessage) (string, error) {
 
 	// Add headers if specified
 	for key, value := range params.Headers {
-		curlCmd += fmt.Sprintf(" -H '%s: %s'", 
-			strings.ReplaceAll(key, "'", "'\\''"), 
+		curlCmd += fmt.Sprintf(" -H '%s: %s'",
+			strings.ReplaceAll(key, "'", "'\\''"),
 			strings.ReplaceAll(value, "'", "'\\''"))
 	}
 

@@ -169,9 +169,9 @@ func loadTools() ([]openaiTool, error) {
 	return toolsList, nil
 }
 
-// LoadSystemMessages loads system messages and tools
+// LoadContext loads system messages and tools
 // This should be called once at startup
-func LoadSystemMessages() error {
+func LoadContext() error {
 	// Load tools
 	var err error
 	tools, err = loadTools()
@@ -182,7 +182,25 @@ func LoadSystemMessages() error {
 	// Load system prompt from prompts/system.md
 	systemContent, err := os.ReadFile("prompts/system.md")
 	if err != nil {
-		return fmt.Errorf("failed to read system.md: %v", err)
+		if os.IsNotExist(err) {
+			// If file doesn't exist, create the directory and an empty file
+			if err := os.MkdirAll("prompts", 0755); err != nil {
+				return fmt.Errorf("failed to create prompts directory: %v", err)
+			}
+			
+			// Create an empty system.md file
+			if err := os.WriteFile("prompts/system.md", []byte("# System Instructions\n\nDefault system instructions."), 0644); err != nil {
+				return fmt.Errorf("failed to create system.md: %v", err)
+			}
+			
+			// Read the newly created file
+			systemContent, err = os.ReadFile("prompts/system.md")
+			if err != nil {
+				return fmt.Errorf("failed to read system.md: %v", err)
+			}
+		} else {
+			return fmt.Errorf("failed to read system.md: %v", err)
+		}
 	}
 
 	// Add system message to conversation history
