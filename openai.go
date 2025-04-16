@@ -19,9 +19,9 @@ var systemMessage openaiMessage // Store the system message (text.md)
 var tools []openaiTool          // Store the tools loaded at startup
 
 type openaiRequest struct {
-	Model    string          `json:"model"`
-	Messages []openaiMessage `json:"messages"`
-	Tools    []openaiTool    `json:"tools,omitempty"`
+	Model    string        `json:"model"`
+	Messages []interface{} `json:"messages"`
+	Tools    []openaiTool  `json:"tools,omitempty"`
 }
 
 type openaiTool struct {
@@ -184,6 +184,20 @@ func LoadSystemMessages() error {
 	return err
 }
 
+// ToolCallMessage represents a message with a tool call
+type ToolCallMessage struct {
+	Role      string     `json:"role"`
+	Content   string     `json:"content,omitempty"`
+	ToolCalls []toolCall `json:"tool_calls,omitempty"`
+}
+
+// ToolResultMessage represents a message with a tool result
+type ToolResultMessage struct {
+	Role        string `json:"role"`
+	ToolCallID  string `json:"tool_call_id"`
+	Content     string `json:"content"`
+}
+
 // AskLlm sends a prompt to OpenAI's API and returns the response.
 // model: for example, "gpt-3.5-turbo" or "gpt-4"
 // prompt: your user input
@@ -210,10 +224,19 @@ func AskLlm(model, prompt string) (string, error) {
 	// Append the current user prompt
 	messages = append(messages, openaiMessage{Role: "user", Content: prompt})
 
+	// Convert messages to interface{} slice
+	var messagesInterface []interface{}
+	for _, msg := range messages {
+		messagesInterface = append(messagesInterface, map[string]interface{}{
+			"role":    msg.Role,
+			"content": msg.Content,
+		})
+	}
+
 	url := "https://api.openai.com/v1/chat/completions"
 	reqBody := openaiRequest{
 		Model:    model,
-		Messages: messages,
+		Messages: messagesInterface,
 		Tools:    tools,
 	}
 	bodyBytes, _ := json.Marshal(&reqBody)
@@ -244,7 +267,81 @@ func AskLlm(model, prompt string) (string, error) {
 
 	// Check if the response contains tool calls
 	if len(out.Choices[0].Message.ToolCalls) > 0 {
-		return HandleToolCalls(out.Choices[0].Message.ToolCalls)
+		toolCallsResult, toolResults, err := HandleToolCallsWithResults(out.Choices[0].Message.ToolCalls)
+		if err != nil {
+			return "", err
+		}
+
+		// If we have tool calls and results, send a follow-up request
+		if len(toolResults) > 0 {
+			// Create a new set of messages with the tool results
+			var followupMessages []interface{}
+			
+			// Copy all previous messages (convert openaiMessage to map to ensure proper serialization)
+			for _, msg := range messages {
+				followupMessages = append(followupMessages, map[string]interface{}{
+					"role":    msg.Role,
+					"content": msg.Content,
+				})
+			}
+
+			// Add assistant message with tool calls
+			followupMessages = append(followupMessages, map[string]interface{}{
+				"role":       "assistant",
+				"tool_calls": out.Choices[0].Message.ToolCalls,
+			})
+
+			// Add tool results
+			for _, result := range toolResults {
+				followupMessages = append(followupMessages, map[string]interface{}{
+					"role":         "tool",
+					"tool_call_id": result.CallID,
+					"content":      result.Output,
+				})
+			}
+
+			// Make a follow-up request with tool results
+			followupReqBody := openaiRequest{
+				Model:    model,
+				Messages: followupMessages,
+				Tools:    tools,
+			}
+			
+			followupBodyBytes, _ := json.Marshal(&followupReqBody)
+			followupReq, err := http.NewRequest("POST", url, bytes.NewBuffer(followupBodyBytes))
+			if err != nil {
+				return toolCallsResult, nil // Fall back to just showing tool calls result
+			}
+			
+			followupReq.Header.Set("Content-Type", "application/json")
+			followupReq.Header.Set("Authorization", "Bearer "+apiKey)
+			
+			followupResp, err := http.DefaultClient.Do(followupReq)
+			if err != nil {
+				return toolCallsResult, nil // Fall back to just showing tool calls result
+			}
+			defer followupResp.Body.Close()
+			
+			followupBody, _ := io.ReadAll(followupResp.Body)
+			var followupOut openaiResponse
+			
+			if err := json.Unmarshal(followupBody, &followupOut); err != nil {
+				return toolCallsResult, nil // Fall back to just showing tool calls result
+			}
+			
+			if followupOut.Error != nil {
+				return toolCallsResult, nil // Fall back to just showing tool calls result
+			}
+			
+			if len(followupOut.Choices) == 0 {
+				return toolCallsResult, nil // Fall back to just showing tool calls result
+			}
+			
+			// Return the model's response after processing the tool results
+			return followupOut.Choices[0].Message.Content, nil
+		}
+
+		return toolCallsResult, nil
 	}
 
 	// Return the regular content response if no tool calls

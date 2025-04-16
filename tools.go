@@ -231,10 +231,24 @@ func searchFiles(rootPath string, pattern *regexp.Regexp, includePattern string)
 	return results, err
 }
 
-// HandleToolCalls processes tool calls from the LLM response
+// ToolCallResult represents the result of a tool call
+type ToolCallResult struct {
+	CallID string
+	Output string
+}
+
+// HandleToolCalls processes tool calls from the LLM response (original function kept for backward compatibility)
 func HandleToolCalls(toolCalls []toolCall) (string, error) {
+	response, _, err := HandleToolCallsWithResults(toolCalls)
+	return response, err
+}
+
+// HandleToolCallsWithResults processes tool calls and returns both formatted response and structured results
+func HandleToolCallsWithResults(toolCalls []toolCall) (string, []ToolCallResult, error) {
 	var toolResponse strings.Builder
 	toolResponse.WriteString("Tool calls detected:\n\n")
+
+	var results []ToolCallResult
 
 	for _, toolCall := range toolCalls {
 		toolName := toolCall.Function.Name
@@ -258,10 +272,19 @@ func HandleToolCalls(toolCalls []toolCall) (string, error) {
 			result = fmt.Sprintf("Tool %s is not implemented yet.", toolName)
 		}
 
+		// Store the result for later use in follow-up requests
+		results = append(results, ToolCallResult{
+			CallID: toolCall.ID,
+			Output: result,
+		})
+
 		toolResponse.WriteString(fmt.Sprintf("\nResult:\n%s\n\n", result))
 	}
 
-	return toolResponse.String(), nil
+	// Print the results to stdout for debugging
+	fmt.Println(toolResponse.String())
+
+	return toolResponse.String(), results, nil
 }
 
 // formatResults formats the grep results as a string
@@ -280,7 +303,7 @@ func formatResults(results []GrepResult) string {
 
 	// Limit the number of files and matches to display to avoid overwhelming output
 	maxFilesToShow := 20
-	maxMatchesPerFile := 5
+	// maxMatchesPerFile := 5
 
 	for i, result := range results {
 		if i >= maxFilesToShow {
@@ -289,18 +312,18 @@ func formatResults(results []GrepResult) string {
 			break
 		}
 
-		sb.WriteString(fmt.Sprintf("File: %s\n", result.FilePath))
+		sb.WriteString(fmt.Sprintf("%s\n", result.FilePath))
 
-		if len(result.Matches) <= maxMatchesPerFile {
-			// Show all matches
-			sb.WriteString(fmt.Sprintf("Matches: %s\n\n", strings.Join(result.Matches, ", ")))
-		} else {
-			// Show limited matches with a count
-			matches := result.Matches[:maxMatchesPerFile]
-			sb.WriteString(fmt.Sprintf("Matches (%d total): %s, ...\n\n",
-				len(result.Matches),
-				strings.Join(matches, ", ")))
-		}
+		// if len(result.Matches) <= maxMatchesPerFile {
+		// 	// Show all matches
+		// 	sb.WriteString(fmt.Sprintf("Matches: %s\n\n", strings.Join(result.Matches, ", ")))
+		// } else {
+		// 	// Show limited matches with a count
+		// 	matches := result.Matches[:maxMatchesPerFile]
+		// 	sb.WriteString(fmt.Sprintf("Matches (%d total): %s, ...\n\n",
+		// 		len(result.Matches),
+		// 		strings.Join(matches, ", ")))
+		// }
 	}
 
 	return sb.String()
