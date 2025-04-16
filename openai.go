@@ -93,14 +93,20 @@ func loadSystemMessagesAndTools() (openaiMessage, []openaiTool, error) {
 			return nil
 		}
 
+		// Get the base filename
+		baseName := filepath.Base(path)
+		
+		// Skip dispatch_agent.md
+		if baseName == "dispatch_agent.md" {
+			return nil
+		}
+
 		// Read file content
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
 
-		// Get the base filename
-		baseName := filepath.Base(path)
 		contentStr := string(content)
 
 		// If it's text.md, it's the system message
