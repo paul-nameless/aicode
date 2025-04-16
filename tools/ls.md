@@ -12,7 +12,7 @@ Lists files and directories in a given path. The path parameter must be an absol
     "properties": {
       "path": {
         "type": "string",
-        "description": "The absolute path to the directory to list (must be absolute, not relative)"
+        "description": "The absolute path to the directory to list (must be absolute, not relative), by default should be current path"
       },
       "ignore": {
         "type": "array",

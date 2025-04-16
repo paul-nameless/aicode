@@ -43,6 +43,12 @@ type GlobToolParams struct {
 	Path    string `json:"path,omitempty"`
 }
 
+// LsToolParams represents the parameters for the LsTool
+type LsToolParams struct {
+	Path   string   `json:"path"`
+	Ignore []string `json:"ignore,omitempty"`
+}
+
 // GrepResult represents a single file match result
 type GrepResult struct {
 	FilePath string    `json:"file_path"`
@@ -266,6 +272,11 @@ func HandleToolCallsWithResults(toolCalls []toolCall) (string, []ToolCallResult,
 			if err != nil {
 				result = fmt.Sprintf("Error executing Bash: %v", err)
 			}
+		case "LS":
+			result, err = ExecuteLsTool(toolCall.Function.Arguments)
+			if err != nil {
+				result = fmt.Sprintf("Error executing LS: %v", err)
+			}
 		default:
 			// For now, other tools aren't implemented yet
 			result = fmt.Sprintf("Tool %s is not implemented yet.", toolName)
@@ -405,6 +416,93 @@ func ExecuteFindFilesTool(paramsJSON json.RawMessage) (string, error) {
 	// 	}
 
 	// return sb.String(), nil
+}
+
+// ExecuteLsTool lists files and directories in a given path using the shell ls command
+func ExecuteLsTool(paramsJSON json.RawMessage) (string, error) {
+	fmt.Printf("DEBUG - Raw ls params received: %s\n", string(paramsJSON))
+
+	// Try multiple approaches to handle potential JSON format issues
+	var params LsToolParams
+	err := json.Unmarshal(paramsJSON, &params)
+
+	// Try to handle string-encoded JSON if direct unmarshaling fails
+	if err != nil {
+		var strArg string
+		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
+			// We got a string, check if it's JSON
+			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
+				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
+				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
+					// Successfully parsed
+					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
+				} else {
+					// Both approaches failed
+					return "", fmt.Errorf("failed to parse ls tool parameters: %v (from string: %v)", err, err3)
+				}
+			} else {
+				// It's a simple string, assume it's just the path
+				params.Path = strArg
+				fmt.Printf("DEBUG - Treating as simple path: %s\n", strArg)
+			}
+		} else {
+			// Both approaches failed
+			return "", fmt.Errorf("failed to parse ls tool parameters: %v", err)
+		}
+	}
+
+	// Use current directory if path is not specified
+	if params.Path == "" || params.Path == "/" {
+		var err error
+		params.Path, err = os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("failed to get current directory: %v", err)
+		}
+	}
+
+	// Check if the path exists
+	_, err = os.Stat(params.Path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Sprintf("Path does not exist: %s", params.Path), nil
+		}
+		return "", fmt.Errorf("error accessing path: %v", err)
+	}
+
+	// Build the ls command with options
+	lsCmd := fmt.Sprintf("ls -la '%s'", strings.ReplaceAll(params.Path, "'", "'\\''"))
+
+	// Add ignore patterns if specified
+	if len(params.Ignore) > 0 {
+		// Create a grep pattern to exclude files
+		grepExclude := ""
+		for i, pattern := range params.Ignore {
+			if i > 0 {
+				grepExclude += " -e "
+			}
+			// Escape the pattern for grep
+			escapedPattern := strings.ReplaceAll(pattern, "'", "'\\''")
+			grepExclude += fmt.Sprintf("'%s'", escapedPattern)
+		}
+
+		// Pipe ls output through grep -v to exclude matching files
+		if grepExclude != "" {
+			lsCmd += fmt.Sprintf(" | grep -v %s", grepExclude)
+		}
+	}
+
+	// Execute the command
+	result, err := executeCommand(lsCmd, 0)
+	if err != nil {
+		return "", fmt.Errorf("error executing ls command: %v", err)
+	}
+
+	// Format the output
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Directory: %s\n\n", params.Path))
+	sb.WriteString(result)
+
+	return sb.String(), nil
 }
 
 // ExecuteBashTool executes a bash command in a persistent shell session

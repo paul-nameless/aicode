@@ -40,7 +40,6 @@ type openaiMessage struct {
 	Content string `json:"content"`
 }
 
-
 type openaiResponse struct {
 	Choices []struct {
 		Message struct {
@@ -137,7 +136,6 @@ func loadSystemMessagesAndTools() (openaiMessage, []openaiTool, error) {
 					}
 
 					if err := json.Unmarshal([]byte(jsonSchema), &toolSchema); err == nil {
-						fmt.Printf("Successfully parsed JSON schema for tool: %s\n", toolName)
 
 						// Successfully parsed the schema
 						toolsList = append(toolsList, openaiTool{
@@ -193,9 +191,9 @@ type ToolCallMessage struct {
 
 // ToolResultMessage represents a message with a tool result
 type ToolResultMessage struct {
-	Role        string `json:"role"`
-	ToolCallID  string `json:"tool_call_id"`
-	Content     string `json:"content"`
+	Role       string `json:"role"`
+	ToolCallID string `json:"tool_call_id"`
+	Content    string `json:"content"`
 }
 
 // AskLlm sends a prompt to OpenAI's API and returns the response.
@@ -276,7 +274,7 @@ func AskLlm(model, prompt string) (string, error) {
 		if len(toolResults) > 0 {
 			// Create a new set of messages with the tool results
 			var followupMessages []interface{}
-			
+
 			// Copy all previous messages (convert openaiMessage to map to ensure proper serialization)
 			for _, msg := range messages {
 				followupMessages = append(followupMessages, map[string]interface{}{
@@ -306,37 +304,37 @@ func AskLlm(model, prompt string) (string, error) {
 				Messages: followupMessages,
 				Tools:    tools,
 			}
-			
+
 			followupBodyBytes, _ := json.Marshal(&followupReqBody)
 			followupReq, err := http.NewRequest("POST", url, bytes.NewBuffer(followupBodyBytes))
 			if err != nil {
 				return toolCallsResult, nil // Fall back to just showing tool calls result
 			}
-			
+
 			followupReq.Header.Set("Content-Type", "application/json")
 			followupReq.Header.Set("Authorization", "Bearer "+apiKey)
-			
+
 			followupResp, err := http.DefaultClient.Do(followupReq)
 			if err != nil {
 				return toolCallsResult, nil // Fall back to just showing tool calls result
 			}
 			defer followupResp.Body.Close()
-			
+
 			followupBody, _ := io.ReadAll(followupResp.Body)
 			var followupOut openaiResponse
-			
+
 			if err := json.Unmarshal(followupBody, &followupOut); err != nil {
 				return toolCallsResult, nil // Fall back to just showing tool calls result
 			}
-			
+
 			if followupOut.Error != nil {
 				return toolCallsResult, nil // Fall back to just showing tool calls result
 			}
-			
+
 			if len(followupOut.Choices) == 0 {
 				return toolCallsResult, nil // Fall back to just showing tool calls result
 			}
-			
+
 			// Return the model's response after processing the tool results
 			return followupOut.Choices[0].Message.Content, nil
 		}
