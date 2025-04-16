@@ -11,6 +11,18 @@ import (
 	"time"
 )
 
+// Import the toolCall type from openai.go
+type toolCall struct {
+	ID       string           `json:"id"`
+	Type     string           `json:"type"`
+	Function toolCallFunction `json:"function"`
+}
+
+type toolCallFunction struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+}
+
 // GrepToolParams represents the parameters for the GrepTool
 type GrepToolParams struct {
 	Pattern string `json:"pattern"`
@@ -217,6 +229,39 @@ func searchFiles(rootPath string, pattern *regexp.Regexp, includePattern string)
 	})
 
 	return results, err
+}
+
+// HandleToolCalls processes tool calls from the LLM response
+func HandleToolCalls(toolCalls []toolCall) (string, error) {
+	var toolResponse strings.Builder
+	toolResponse.WriteString("Tool calls detected:\n\n")
+
+	for _, toolCall := range toolCalls {
+		toolName := toolCall.Function.Name
+
+		toolResponse.WriteString(fmt.Sprintf("Tool: %s\nArguments: %s\n",
+			toolName,
+			string(toolCall.Function.Arguments)))
+
+		// Execute the tool based on the name
+		var result string
+		var err error
+
+		switch toolName {
+		case "GrepTool":
+			result, err = ExecuteGrepTool(toolCall.Function.Arguments)
+			if err != nil {
+				result = fmt.Sprintf("Error executing GrepTool: %v", err)
+			}
+		default:
+			// For now, other tools aren't implemented yet
+			result = fmt.Sprintf("Tool %s is not implemented yet.", toolName)
+		}
+
+		toolResponse.WriteString(fmt.Sprintf("\nResult:\n%s\n\n", result))
+	}
+
+	return toolResponse.String(), nil
 }
 
 // formatResults formats the grep results as a string

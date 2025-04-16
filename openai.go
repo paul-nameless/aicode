@@ -40,16 +40,6 @@ type openaiMessage struct {
 	Content string `json:"content"`
 }
 
-type toolCallFunction struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
-}
-
-type toolCall struct {
-	ID       string           `json:"id"`
-	Type     string           `json:"type"`
-	Function toolCallFunction `json:"function"`
-}
 
 type openaiResponse struct {
 	Choices []struct {
@@ -254,35 +244,7 @@ func AskLlm(model, prompt string) (string, error) {
 
 	// Check if the response contains tool calls
 	if len(out.Choices[0].Message.ToolCalls) > 0 {
-		var toolResponse strings.Builder
-		toolResponse.WriteString("Tool calls detected:\n\n")
-
-		for _, toolCall := range out.Choices[0].Message.ToolCalls {
-			toolName := toolCall.Function.Name
-
-			toolResponse.WriteString(fmt.Sprintf("Tool: %s\nArguments: %s\n",
-				toolName,
-				string(toolCall.Function.Arguments)))
-
-			// Execute the tool based on the name
-			var result string
-			var err error
-
-			switch toolName {
-			case "GrepTool":
-				result, err = ExecuteGrepTool(toolCall.Function.Arguments)
-				if err != nil {
-					result = fmt.Sprintf("Error executing GrepTool: %v", err)
-				}
-			default:
-				// For now, other tools aren't implemented yet
-				result = fmt.Sprintf("Tool %s is not implemented yet.", toolName)
-			}
-
-			toolResponse.WriteString(fmt.Sprintf("\nResult:\n%s\n\n", result))
-		}
-
-		return toolResponse.String(), nil
+		return HandleToolCalls(out.Choices[0].Message.ToolCalls)
 	}
 
 	// Return the regular content response if no tool calls
