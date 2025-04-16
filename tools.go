@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -16,6 +17,13 @@ type toolCall struct {
 	ID       string           `json:"id"`
 	Type     string           `json:"type"`
 	Function toolCallFunction `json:"function"`
+}
+
+// BashToolParams represents the parameters for the BashTool
+type BashToolParams struct {
+	Command     string `json:"command"`
+	Timeout     int    `json:"timeout,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 type toolCallFunction struct {
@@ -267,6 +275,11 @@ func HandleToolCallsWithResults(toolCalls []toolCall) (string, []ToolCallResult,
 			if err != nil {
 				result = fmt.Sprintf("Error executing GrepTool: %v", err)
 			}
+		case "Bash":
+			result, err = ExecuteBashTool(toolCall.Function.Arguments)
+			if err != nil {
+				result = fmt.Sprintf("Error executing Bash: %v", err)
+			}
 		default:
 			// For now, other tools aren't implemented yet
 			result = fmt.Sprintf("Tool %s is not implemented yet.", toolName)
@@ -285,6 +298,76 @@ func HandleToolCallsWithResults(toolCalls []toolCall) (string, []ToolCallResult,
 	fmt.Println(toolResponse.String())
 
 	return toolResponse.String(), results, nil
+}
+
+// ExecuteBashTool executes a bash command in a persistent shell session
+func ExecuteBashTool(paramsJSON json.RawMessage) (string, error) {
+	fmt.Printf("DEBUG - Raw bash params received: %s\n", string(paramsJSON))
+
+	// Try multiple approaches to handle potential JSON format issues
+	var params BashToolParams
+	err := json.Unmarshal(paramsJSON, &params)
+
+	// Try to handle string-encoded JSON if direct unmarshaling fails
+	if err != nil {
+		var strArg string
+		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
+			// We got a string, check if it's JSON
+			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
+				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
+				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
+					// Successfully parsed
+					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
+				} else {
+					// Both approaches failed
+					return "", fmt.Errorf("failed to parse bash tool parameters: %v (from string: %v)", err, err3)
+				}
+			} else {
+				// It's a simple string, assume it's just the command
+				params.Command = strArg
+				fmt.Printf("DEBUG - Treating as simple command: %s\n", strArg)
+			}
+		} else {
+			// Both approaches failed
+			return "", fmt.Errorf("failed to parse bash tool parameters: %v", err)
+		}
+	}
+
+	// Validate parameters
+	if params.Command == "" {
+		return "", fmt.Errorf("command parameter is required")
+	}
+
+	fmt.Printf("DEBUG - Executing command: %s, timeout: %d\n", 
+		params.Command, params.Timeout)
+
+	// Set default timeout if not provided
+	// Note: Currently we don't implement timeouts in this version
+	// but log the value for future implementation
+	if params.Timeout > 0 {
+		// Ensure timeout doesn't exceed max allowed (10 minutes)
+		if params.Timeout > 600000 {
+			params.Timeout = 600000
+		}
+		fmt.Printf("DEBUG - Using timeout value: %d ms\n", params.Timeout)
+	}
+
+	// Create a command to execute the bash command
+	cmd := exec.Command("bash", "-c", params.Command)
+	
+	// Set up output capture
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error executing command: %v\nOutput: %s", err, string(output)), nil
+	}
+
+	// Truncate output if it exceeds 30000 characters
+	result := string(output)
+	if len(result) > 30000 {
+		result = result[:30000] + "\n... [Output truncated due to size]"
+	}
+
+	return result, nil
 }
 
 // formatResults formats the grep results as a string
