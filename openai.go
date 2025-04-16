@@ -184,6 +184,12 @@ func AskLlm(model, prompt string) (string, error) {
 		return "", errors.New("OPENAI_API_KEY environment variable not set")
 	}
 
+	// Get base URL from environment variable or use default
+	baseURL := os.Getenv("AI_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.openai.com"
+	}
+
 	// Get conversation history (which now includes the system message)
 	messages := getConversationHistory()
 
@@ -199,7 +205,7 @@ func AskLlm(model, prompt string) (string, error) {
 		})
 	}
 
-	url := "https://api.openai.com/v1/chat/completions"
+	url := baseURL + "/v1/chat/completions"
 	reqBody := openaiRequest{
 		Model:    model,
 		Messages: messagesInterface,
@@ -287,7 +293,7 @@ func AskLlm(model, prompt string) (string, error) {
 			}
 			
 			followupBodyBytes, _ := json.Marshal(&followupReqBody)
-			followupReq, err := http.NewRequest("POST", url, bytes.NewBuffer(followupBodyBytes))
+			followupReq, err := http.NewRequest("POST", baseURL + "/v1/chat/completions", bytes.NewBuffer(followupBodyBytes))
 			if err != nil {
 				return toolCallsResult, nil // Fall back to just showing tool calls result
 			}
