@@ -60,11 +60,14 @@ type GrepResult struct {
 func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 	fmt.Printf("DEBUG - Raw params received: %s\n", string(paramsJSON))
 
+	// Clean up the JSON by removing any tab characters that might cause issues
+	cleanJSON := strings.ReplaceAll(string(paramsJSON), "\t", "")
+	
 	// Try multiple approaches to handle potential JSON format issues
 
 	// 1. Try direct unmarshaling first
 	var params GrepToolParams
-	err := json.Unmarshal(paramsJSON, &params)
+	err := json.Unmarshal([]byte(cleanJSON), &params)
 
 	// 2. If that fails, try to handle string-encoded JSON
 	if err != nil {
@@ -122,6 +125,9 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 		rgCmd += fmt.Sprintf(" --glob '%s'", strings.ReplaceAll(params.Include, "'", "'\\''"))
 	}
 
+	// Clean up the command by removing any tab characters that might cause issues
+	rgCmd = strings.ReplaceAll(rgCmd, "\t", "")
+	
 	// Execute the ripgrep command
 	result, err := executeCommand(rgCmd, 0)
 	return result, nil
