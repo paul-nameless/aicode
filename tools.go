@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 )
@@ -45,7 +44,7 @@ type GrepResult struct {
 	ModTime  time.Time `json:"-"` // Used for sorting, not exported in JSON
 }
 
-// ExecuteGrepTool performs a grep-like search in files
+// ExecuteGrepTool performs a grep-like search in files using ripgrep (rg)
 func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 	fmt.Printf("DEBUG - Raw params received: %s\n", string(paramsJSON))
 
@@ -95,49 +94,25 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("failed to get current directory: %v", err)
 		}
-	} else {
-		// Ensure path is absolute
-		if !filepath.IsAbs(params.Path) {
-			absPath, err := filepath.Abs(params.Path)
-			if err != nil {
-				return "", fmt.Errorf("failed to convert path to absolute: %v", err)
-			}
-			params.Path = absPath
-		}
 	}
 
-	// Compile regex pattern with case-insensitive option if not using specific regex syntax
-	var pattern *regexp.Regexp
-	var compileErr error
+	// Build the ripgrep command
+	rgCmd := fmt.Sprintf("rg --pretty --smart-case '%s'",
+		strings.ReplaceAll(params.Pattern, "'", "'\\''")) // Escape single quotes
 
-	// Check if the pattern already contains regex-specific syntax
-	hasRegexSyntax := strings.ContainsAny(params.Pattern, "^$.*+?()[]{}|\\")
-
-	if !hasRegexSyntax {
-		// If it's a simple string without regex syntax, make it case-insensitive
-		pattern, compileErr = regexp.Compile("(?i)" + regexp.QuoteMeta(params.Pattern))
-	} else {
-		// It's already a regex pattern, use as is
-		pattern, compileErr = regexp.Compile(params.Pattern)
+	// Add path if specified
+	if params.Path != "" {
+		rgCmd += fmt.Sprintf(" '%s'", strings.ReplaceAll(params.Path, "'", "'\\''"))
 	}
 
-	if compileErr != nil {
-		return "", fmt.Errorf("invalid regex pattern: %v", compileErr)
+	// Add include pattern if specified
+	if params.Include != "" {
+		rgCmd += fmt.Sprintf(" --glob '%s'", strings.ReplaceAll(params.Include, "'", "'\\''"))
 	}
 
-	// Search for files
-	results, err := searchFiles(params.Path, pattern, params.Include)
-	if err != nil {
-		return "", fmt.Errorf("search failed: %v", err)
-	}
-
-	// Sort results by modification time (newest first)
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].ModTime.After(results[j].ModTime)
-	})
-
-	// Format the results
-	return formatResults(results), nil
+	// Execute the ripgrep command
+	result, err := executeCommand(rgCmd, 0)
+	return result, nil
 }
 
 // searchFiles recursively searches files matching the include pattern for content matching the regex pattern
@@ -300,6 +275,39 @@ func HandleToolCallsWithResults(toolCalls []toolCall) (string, []ToolCallResult,
 	return toolResponse.String(), results, nil
 }
 
+// executeCommand runs a shell command and returns its output
+func executeCommand(command string, timeout int) (string, error) {
+	fmt.Printf("DEBUG - Executing command: %s, timeout: %d\n", command, timeout)
+
+	// Set default timeout if not provided
+	// Note: Currently we don't implement timeouts in this version
+	// but log the value for future implementation
+	if timeout > 0 {
+		// Ensure timeout doesn't exceed max allowed (10 minutes)
+		if timeout > 600000 {
+			timeout = 600000
+		}
+		fmt.Printf("DEBUG - Using timeout value: %d ms\n", timeout)
+	}
+
+	// Create a command to execute the bash command
+	cmd := exec.Command("bash", "-c", command)
+
+	// Set up output capture
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error executing command: %v\nOutput: %s", err, string(output)), nil
+	}
+
+	// Truncate output if it exceeds 30000 characters
+	result := string(output)
+	if len(result) > 30000 {
+		result = result[:30000] + "\n... [Output truncated due to size]"
+	}
+
+	return result, nil
+}
+
 // ExecuteBashTool executes a bash command in a persistent shell session
 func ExecuteBashTool(paramsJSON json.RawMessage) (string, error) {
 	fmt.Printf("DEBUG - Raw bash params received: %s\n", string(paramsJSON))
@@ -338,36 +346,8 @@ func ExecuteBashTool(paramsJSON json.RawMessage) (string, error) {
 		return "", fmt.Errorf("command parameter is required")
 	}
 
-	fmt.Printf("DEBUG - Executing command: %s, timeout: %d\n", 
-		params.Command, params.Timeout)
-
-	// Set default timeout if not provided
-	// Note: Currently we don't implement timeouts in this version
-	// but log the value for future implementation
-	if params.Timeout > 0 {
-		// Ensure timeout doesn't exceed max allowed (10 minutes)
-		if params.Timeout > 600000 {
-			params.Timeout = 600000
-		}
-		fmt.Printf("DEBUG - Using timeout value: %d ms\n", params.Timeout)
-	}
-
-	// Create a command to execute the bash command
-	cmd := exec.Command("bash", "-c", params.Command)
-	
-	// Set up output capture
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Sprintf("Error executing command: %v\nOutput: %s", err, string(output)), nil
-	}
-
-	// Truncate output if it exceeds 30000 characters
-	result := string(output)
-	if len(result) > 30000 {
-		result = result[:30000] + "\n... [Output truncated due to size]"
-	}
-
-	return result, nil
+	// Execute the command using the extracted function
+	return executeCommand(params.Command, params.Timeout)
 }
 
 // formatResults formats the grep results as a string
