@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -54,7 +55,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			headerHeight := 0
 			footerHeight := 3 // Input field + divider
 			verticalMarginHeight := headerHeight + footerHeight
-			
+
 			m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
 			m.viewport.SetContent("")
 			m.ready = true
@@ -62,7 +63,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Width = msg.Width
 			m.viewport.Height = msg.Height - 3
 		}
-		
+
 		m.textInput.Width = msg.Width - 2
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -103,10 +104,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				rendered: rendered,
 				role:     "user",
 			})
-			
+
 			// Update conversation history in openai.go
 			UpdateConversationHistory(input, "user")
-			
+
 			// Update viewport content
 			m.updateViewportContent()
 
@@ -114,7 +115,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
 
 				// Send to OpenAI and get response
-				response, err := AskOpenAI("gpt-4.1-nano", input)
+				response, err := AskLlm("gpt-4.1-nano", input)
 				if err != nil {
 					return entry{
 						raw:      fmt.Sprintf("Error: %v", err),
@@ -136,9 +137,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case entry:
-		// Handle the response from AskOpenAI
+		// Handle the response from AskLlm
 		m.entries = append(m.entries, msg)
-		
+
 		// Update conversation history in openai.go
 		UpdateConversationHistory(msg.raw, msg.role)
 		m.updateViewportContent()
@@ -220,7 +221,7 @@ func (m model) View() string {
 
 	// Display chat history in the viewport
 	s.WriteString(m.viewport.View())
-	
+
 	// Display input field at the bottom with a divider
 	s.WriteString("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 	s.WriteString(fmt.Sprintf("%s\n", m.textInput.View()))
@@ -228,12 +229,49 @@ func (m model) View() string {
 	return s.String()
 }
 
+// runSimpleMode processes a single prompt in non-interactive mode
+func runSimpleMode(prompt string) {
+	// Update conversation history with the user prompt
+	UpdateConversationHistory(prompt, "user")
+
+	// Send to OpenAI and get response
+	response, err := AskLlm("gpt-4.1-nano", prompt)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Print the response
+	fmt.Println(response)
+}
+
 func main() {
+	// Parse command line flags
+	quietFlag := flag.Bool("q", false, "Run in simple mode with a single prompt")
+	flag.Parse()
+
 	// Load system messages at startup
 	if err := LoadSystemMessages(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to load system messages: %v\n", err)
 	}
-	
+
+	// Check if quiet flag is set
+	if *quietFlag {
+		// Get the prompt from the remaining arguments
+		args := flag.Args()
+		if len(args) == 0 {
+			fmt.Fprintf(os.Stderr, "Error: No prompt provided in simple mode\n")
+			fmt.Fprintf(os.Stderr, "Usage: %s -q \"your prompt here\"\n", os.Args[0])
+			os.Exit(1)
+		}
+
+		// Join all arguments as the prompt
+		prompt := strings.Join(args, " ")
+		runSimpleMode(prompt)
+		return
+	}
+
+	// Run the fancy TUI mode
 	p := tea.NewProgram(
 		initialModel(),
 		tea.WithAltScreen(),

@@ -5,3 +5,6 @@ version: "3"
 tasks:
   default:
     - go build . && OPENAI_API_KEY=$(pass show i/openai.com-api-key| head -n 1) ./aicode
+
+  build:
+    - go build .

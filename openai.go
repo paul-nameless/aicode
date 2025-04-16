@@ -13,15 +13,20 @@ import (
 	"strings"
 )
 
+// Global variables
+var conversationHistory []ConversationEntry
+var systemMessage openaiMessage // Store the system message (text.md)
+var tools []openaiTool          // Store the tools loaded at startup
+
 type openaiRequest struct {
-	Model    string           `json:"model"`
-	Messages []openaiMessage  `json:"messages"`
-	Tools    []openaiTool     `json:"tools,omitempty"`
+	Model    string          `json:"model"`
+	Messages []openaiMessage `json:"messages"`
+	Tools    []openaiTool    `json:"tools,omitempty"`
 }
 
 type openaiTool struct {
-	Type       string           `json:"type"`
-	Function   openaiFunction   `json:"function"`
+	Type     string         `json:"type"`
+	Function openaiFunction `json:"function"`
 }
 
 type openaiFunction struct {
@@ -65,16 +70,11 @@ type ConversationEntry struct {
 	role string // "user" or "assistant"
 }
 
-// Global variables
-var conversationHistory []ConversationEntry
-var systemMessage openaiMessage // Store the system message (text.md)
-var tools []openaiTool // Store the tools loaded at startup
-
 // getConversationHistory returns the conversation history as OpenAI messages
 func getConversationHistory() []openaiMessage {
 	// This is a package-level variable that will be set from main.go
 	var messages []openaiMessage
-	
+
 	// Convert entries to OpenAI messages
 	for _, entry := range conversationHistory {
 		if entry.role == "user" || entry.role == "assistant" {
@@ -84,7 +84,7 @@ func getConversationHistory() []openaiMessage {
 			})
 		}
 	}
-	
+
 	return messages
 }
 
@@ -93,27 +93,27 @@ func getConversationHistory() []openaiMessage {
 func loadSystemMessagesAndTools() (openaiMessage, []openaiTool, error) {
 	var sysMsg openaiMessage
 	var toolsList []openaiTool
-	
+
 	err := filepath.Walk("tools", func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		
+
 		// Skip directories
 		if info.IsDir() {
 			return nil
 		}
-		
+
 		// Read file content
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		
+
 		// Get the base filename
 		baseName := filepath.Base(path)
 		contentStr := string(content)
-		
+
 		// If it's text.md, it's the system message
 		if baseName == "text.md" {
 			sysMsg = openaiMessage{
@@ -124,31 +124,31 @@ func loadSystemMessagesAndTools() (openaiMessage, []openaiTool, error) {
 			// It's a tool - extract JSON schema if available
 			// Extract tool name from filename (remove .md extension)
 			toolName := strings.TrimSuffix(baseName, filepath.Ext(baseName))
-			
+
 			// Look for JSON schema between triple backticks
 			description := contentStr
-			
+
 			// Find the JSON schema section
 			jsonSchemaStart := strings.Index(contentStr, "```json")
 			if jsonSchemaStart != -1 {
 				// Find the end of the JSON block
 				schemaText := contentStr[jsonSchemaStart+7:]
 				endMarkerIdx := strings.Index(schemaText, "```")
-				
+
 				if endMarkerIdx != -1 {
 					// Extract and parse the JSON schema
 					jsonSchema := schemaText[:endMarkerIdx]
-					
+
 					// Attempt to parse the JSON
 					var toolSchema struct {
 						Name        string          `json:"name"`
 						Description string          `json:"description"`
 						Parameters  json.RawMessage `json:"parameters"`
 					}
-					
+
 					if err := json.Unmarshal([]byte(jsonSchema), &toolSchema); err == nil {
 						fmt.Printf("Successfully parsed JSON schema for tool: %s\n", toolName)
-						
+
 						// Successfully parsed the schema
 						toolsList = append(toolsList, openaiTool{
 							Type: "function",
@@ -164,7 +164,7 @@ func loadSystemMessagesAndTools() (openaiMessage, []openaiTool, error) {
 					}
 				}
 			}
-			
+
 			// If JSON parsing failed or no JSON schema found, use the name and description approach
 			toolsList = append(toolsList, openaiTool{
 				Type: "function",
@@ -174,15 +174,15 @@ func loadSystemMessagesAndTools() (openaiMessage, []openaiTool, error) {
 				},
 			})
 		}
-		
+
 		return nil
 	})
-	
+
 	// If tools directory doesn't exist, just return empty values without error
 	if err != nil && !os.IsNotExist(err) {
 		return openaiMessage{}, nil, err
 	}
-	
+
 	return sysMsg, toolsList, nil
 }
 
@@ -194,32 +194,32 @@ func LoadSystemMessages() error {
 	return err
 }
 
-// AskOpenAI sends a prompt to OpenAI's API and returns the response.
+// AskLlm sends a prompt to OpenAI's API and returns the response.
 // model: for example, "gpt-3.5-turbo" or "gpt-4"
 // prompt: your user input
-func AskOpenAI(model, prompt string) (string, error) {
+func AskLlm(model, prompt string) (string, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return "", errors.New("OPENAI_API_KEY environment variable not set")
 	}
-	
+
 	// Create messages array starting with the system message
 	var messages []openaiMessage
-	
+
 	// Add the system message if it's not empty
 	if systemMessage.Content != "" {
 		messages = append(messages, systemMessage)
 	}
-	
+
 	// Get conversation history
 	historyMessages := getConversationHistory()
-	
+
 	// Append history messages
 	messages = append(messages, historyMessages...)
-	
+
 	// Append the current user prompt
 	messages = append(messages, openaiMessage{Role: "user", Content: prompt})
-	
+
 	url := "https://api.openai.com/v1/chat/completions"
 	reqBody := openaiRequest{
 		Model:    model,
@@ -251,23 +251,23 @@ func AskOpenAI(model, prompt string) (string, error) {
 	if len(out.Choices) == 0 {
 		return "", errors.New("no choices in OpenAI response")
 	}
-	
+
 	// Check if the response contains tool calls
 	if len(out.Choices[0].Message.ToolCalls) > 0 {
 		var toolResponse strings.Builder
 		toolResponse.WriteString("Tool calls detected:\n\n")
-		
+
 		for _, toolCall := range out.Choices[0].Message.ToolCalls {
 			toolName := toolCall.Function.Name
-			
-			toolResponse.WriteString(fmt.Sprintf("Tool: %s\nArguments: %s\n", 
-				toolName, 
+
+			toolResponse.WriteString(fmt.Sprintf("Tool: %s\nArguments: %s\n",
+				toolName,
 				string(toolCall.Function.Arguments)))
-			
+
 			// Execute the tool based on the name
 			var result string
 			var err error
-			
+
 			switch toolName {
 			case "GrepTool":
 				result, err = ExecuteGrepTool(toolCall.Function.Arguments)
@@ -278,13 +278,13 @@ func AskOpenAI(model, prompt string) (string, error) {
 				// For now, other tools aren't implemented yet
 				result = fmt.Sprintf("Tool %s is not implemented yet.", toolName)
 			}
-			
+
 			toolResponse.WriteString(fmt.Sprintf("\nResult:\n%s\n\n", result))
 		}
-		
+
 		return toolResponse.String(), nil
 	}
-	
+
 	// Return the regular content response if no tool calls
 	return out.Choices[0].Message.Content, nil
 }

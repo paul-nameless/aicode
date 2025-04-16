@@ -20,21 +20,21 @@ type GrepToolParams struct {
 
 // GrepResult represents a single file match result
 type GrepResult struct {
-	FilePath    string    `json:"file_path"`
-	Matches     []string  `json:"matches"`
-	ModTime     time.Time `json:"-"` // Used for sorting, not exported in JSON
+	FilePath string    `json:"file_path"`
+	Matches  []string  `json:"matches"`
+	ModTime  time.Time `json:"-"` // Used for sorting, not exported in JSON
 }
 
 // ExecuteGrepTool performs a grep-like search in files
 func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 	fmt.Printf("DEBUG - Raw params received: %s\n", string(paramsJSON))
-	
+
 	// Try multiple approaches to handle potential JSON format issues
-	
+
 	// 1. Try direct unmarshaling first
 	var params GrepToolParams
 	err := json.Unmarshal(paramsJSON, &params)
-	
+
 	// 2. If that fails, try to handle string-encoded JSON
 	if err != nil {
 		var strArg string
@@ -64,8 +64,8 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 	if params.Pattern == "" {
 		return "", fmt.Errorf("pattern parameter is required")
 	}
-	
-	fmt.Printf("DEBUG - Using pattern: %s, path: %s, include: %s\n", 
+
+	fmt.Printf("DEBUG - Using pattern: %s, path: %s, include: %s\n",
 		params.Pattern, params.Path, params.Include)
 
 	// Default path to current directory if not provided
@@ -89,10 +89,10 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 	// Compile regex pattern with case-insensitive option if not using specific regex syntax
 	var pattern *regexp.Regexp
 	var compileErr error
-	
+
 	// Check if the pattern already contains regex-specific syntax
 	hasRegexSyntax := strings.ContainsAny(params.Pattern, "^$.*+?()[]{}|\\")
-	
+
 	if !hasRegexSyntax {
 		// If it's a simple string without regex syntax, make it case-insensitive
 		pattern, compileErr = regexp.Compile("(?i)" + regexp.QuoteMeta(params.Pattern))
@@ -100,7 +100,7 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 		// It's already a regex pattern, use as is
 		pattern, compileErr = regexp.Compile(params.Pattern)
 	}
-	
+
 	if compileErr != nil {
 		return "", fmt.Errorf("invalid regex pattern: %v", compileErr)
 	}
@@ -146,12 +146,12 @@ func searchFiles(rootPath string, pattern *regexp.Regexp, includePattern string)
 				// Extract patterns between braces
 				startIdx := strings.Index(includePattern, "{")
 				endIdx := strings.Index(includePattern, "}")
-				
+
 				if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
 					prefix := includePattern[:startIdx]
 					patterns := strings.Split(includePattern[startIdx+1:endIdx], ",")
 					suffix := includePattern[endIdx+1:]
-					
+
 					matched := false
 					for _, p := range patterns {
 						fullPattern := prefix + p + suffix
@@ -160,7 +160,7 @@ func searchFiles(rootPath string, pattern *regexp.Regexp, includePattern string)
 							break
 						}
 					}
-					
+
 					if !matched {
 						return nil // Skip this file
 					}
@@ -245,15 +245,15 @@ func formatResults(results []GrepResult) string {
 		}
 
 		sb.WriteString(fmt.Sprintf("File: %s\n", result.FilePath))
-		
+
 		if len(result.Matches) <= maxMatchesPerFile {
 			// Show all matches
 			sb.WriteString(fmt.Sprintf("Matches: %s\n\n", strings.Join(result.Matches, ", ")))
 		} else {
 			// Show limited matches with a count
 			matches := result.Matches[:maxMatchesPerFile]
-			sb.WriteString(fmt.Sprintf("Matches (%d total): %s, ...\n\n", 
-				len(result.Matches), 
+			sb.WriteString(fmt.Sprintf("Matches (%d total): %s, ...\n\n",
+				len(result.Matches),
 				strings.Join(matches, ", ")))
 		}
 	}
