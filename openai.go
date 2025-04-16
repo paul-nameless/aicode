@@ -179,9 +179,7 @@ func LoadContext() error {
 		return err
 	}
 
-	if systemContent, err := os.ReadFile("prompts/system.md"); err == nil {
-		UpdateConversationHistory(string(systemContent), "system")
-	}
+	UpdateConversationHistory(defaultSystemPrompt, "system")
 
 	// Check for AI.md file
 	if aiContent, err := os.ReadFile("AI.md"); err == nil {
