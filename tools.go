@@ -277,6 +277,11 @@ func HandleToolCallsWithResults(toolCalls []toolCall) (string, []ToolCallResult,
 			if err != nil {
 				result = fmt.Sprintf("Error executing LS: %v", err)
 			}
+		case "View":
+			result, err = ExecuteViewTool(toolCall.Function.Arguments)
+			if err != nil {
+				result = fmt.Sprintf("Error executing View: %v", err)
+			}
 		default:
 			// For now, other tools aren't implemented yet
 			result = fmt.Sprintf("Tool %s is not implemented yet.", toolName)
@@ -545,6 +550,133 @@ func ExecuteBashTool(paramsJSON json.RawMessage) (string, error) {
 
 	// Execute the command using the extracted function
 	return executeCommand(params.Command, params.Timeout)
+}
+
+// ViewToolParams represents the parameters for the ViewTool
+type ViewToolParams struct {
+	FilePath string `json:"file_path"`
+	Offset   int    `json:"offset,omitempty"`
+	Limit    int    `json:"limit,omitempty"`
+}
+
+// ExecuteViewTool reads a file from the filesystem with optional offset and limit
+func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
+	fmt.Printf("DEBUG - Raw view params received: %s\n", string(paramsJSON))
+
+	// Try multiple approaches to handle potential JSON format issues
+	var params ViewToolParams
+	err := json.Unmarshal(paramsJSON, &params)
+
+	// Try to handle string-encoded JSON if direct unmarshaling fails
+	if err != nil {
+		var strArg string
+		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
+			// We got a string, check if it's JSON
+			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
+				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
+				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
+					// Successfully parsed
+					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
+				} else {
+					// Both approaches failed
+					return "", fmt.Errorf("failed to parse view tool parameters: %v (from string: %v)", err, err3)
+				}
+			} else {
+				// It's a simple string, assume it's just the file path
+				params.FilePath = strArg
+				fmt.Printf("DEBUG - Treating as simple file path: %s\n", strArg)
+			}
+		} else {
+			// Both approaches failed
+			return "", fmt.Errorf("failed to parse view tool parameters: %v", err)
+		}
+	}
+
+	// Validate parameters
+	if params.FilePath == "" {
+		return "", fmt.Errorf("file_path parameter is required")
+	}
+
+	// Check if the file exists
+	fileInfo, err := os.Stat(params.FilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Sprintf("File does not exist: %s", params.FilePath), nil
+		}
+		return "", fmt.Errorf("error accessing file: %v", err)
+	}
+
+	// Check if it's a directory
+	if fileInfo.IsDir() {
+		return fmt.Sprintf("%s is a directory, not a file", params.FilePath), nil
+	}
+
+	// Check if it's an image file
+	if isImageFile(params.FilePath) {
+		return fmt.Sprintf("Image file detected: %s\nPlease use an image viewer to view this file.", params.FilePath), nil
+	}
+
+	// Set default limit if not provided
+	if params.Limit <= 0 {
+		params.Limit = 2000 // Default to 2000 lines
+	}
+
+	// Escape the file path for shell use
+	escapedPath := strings.ReplaceAll(params.FilePath, "'", "'\\''")
+
+	var cmd string
+	if params.Offset > 0 {
+		// Use tail and head to get lines starting from offset with limit
+		cmd = fmt.Sprintf("tail -n +%d '%s' | head -n %d", 
+			params.Offset, escapedPath, params.Limit)
+	} else {
+		// Just use head to get the first N lines
+		cmd = fmt.Sprintf("head -n %d '%s'", params.Limit, escapedPath)
+	}
+
+	// Execute the command
+	result, err := executeCommand(cmd, 0)
+	if err != nil {
+		return "", fmt.Errorf("error reading file: %v", err)
+	}
+
+	// Format the output
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("File: %s\n", params.FilePath))
+	
+	if params.Offset > 0 {
+		sb.WriteString(fmt.Sprintf("Lines %d to %d:\n\n", 
+			params.Offset, params.Offset+min(params.Limit, countLines(result))-1))
+	} else {
+		sb.WriteString(fmt.Sprintf("First %d lines:\n\n", min(params.Limit, countLines(result))))
+	}
+	
+	sb.WriteString(result)
+
+	return sb.String(), nil
+}
+
+// isImageFile checks if a file is an image based on its extension
+func isImageFile(filePath string) bool {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	imageExts := map[string]bool{
+		".jpg": true, ".jpeg": true, ".png": true, ".gif": true,
+		".bmp": true, ".tiff": true, ".webp": true, ".svg": true,
+	}
+	return imageExts[ext]
+}
+
+// countLines counts the number of lines in a string
+func countLines(s string) int {
+	return len(strings.Split(s, "\n"))
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // formatResults formats the grep results as a string
