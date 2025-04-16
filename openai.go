@@ -179,32 +179,20 @@ func LoadContext() error {
 		return err
 	}
 
-	// Load system prompt from prompts/system.md
-	systemContent, err := os.ReadFile("prompts/system.md")
-	if err != nil {
-		if os.IsNotExist(err) {
-			// If file doesn't exist, create the directory and an empty file
-			if err := os.MkdirAll("prompts", 0755); err != nil {
-				return fmt.Errorf("failed to create prompts directory: %v", err)
-			}
-			
-			// Create an empty system.md file
-			if err := os.WriteFile("prompts/system.md", []byte("# System Instructions\n\nDefault system instructions."), 0644); err != nil {
-				return fmt.Errorf("failed to create system.md: %v", err)
-			}
-			
-			// Read the newly created file
-			systemContent, err = os.ReadFile("prompts/system.md")
-			if err != nil {
-				return fmt.Errorf("failed to read system.md: %v", err)
-			}
-		} else {
-			return fmt.Errorf("failed to read system.md: %v", err)
-		}
+	if systemContent, err := os.ReadFile("prompts/system.md"); err == nil {
+		UpdateConversationHistory(string(systemContent), "system")
 	}
 
-	// Add system message to conversation history
-	UpdateConversationHistory(string(systemContent), "system")
+	// Check for AI.md file
+	if aiContent, err := os.ReadFile("AI.md"); err == nil {
+		// Add AI.md content as system message
+		UpdateConversationHistory(string(aiContent), "system")
+	}
+
+	if claudeContent, err := os.ReadFile("CLAUDE.md"); err == nil {
+		// Add CLAUDE.md content as system message
+		UpdateConversationHistory(string(claudeContent), "system")
+	}
 
 	return nil
 }
