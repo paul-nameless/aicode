@@ -2,36 +2,6 @@
 
 This is a tool for editing files. For moving or renaming files, you should generally use the Bash tool with the 'mv' command instead. For larger edits, use the Write tool to overwrite files.
 
-```json
-{
-  "name": "Edit",
-  "description": "This is a tool for editing files. For moving or renaming files, use Bash with mv. For larger edits, use Replace.",
-  "parameters": {
-    "type": "object",
-    "required": ["file_path", "old_string", "new_string"],
-    "properties": {
-      "file_path": {
-        "type": "string",
-        "description": "The absolute path to the file to modify"
-      },
-      "old_string": {
-        "type": "string",
-        "description": "The text to replace"
-      },
-      "new_string": {
-        "type": "string",
-        "description": "The text to replace it with"
-      },
-      "expected_replacements": {
-        "type": "number",
-        "description": "The expected number of replacements to perform. Defaults to 1 if not specified.",
-        "default": 1
-      }
-    }
-  }
-}
-```
-
 Before using this tool:
 
 1. Use the View tool to understand the file's contents and context

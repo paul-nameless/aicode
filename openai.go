@@ -6,11 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
 )
 
 // Global variables
@@ -76,96 +73,65 @@ func getConversationHistory() []openaiMessage {
 	return messages
 }
 
-// loadTools reads files in the tools/ directory and loads them as tools
+// loadTools loads tools using the schema constants defined in tools.go
 func loadTools() ([]openaiTool, error) {
 	var toolsList []openaiTool
-
-	err := filepath.Walk("tools", func(path string, info fs.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Skip directories
-		if info.IsDir() {
-			return nil
-		}
-
-		// Get the base filename
-		baseName := filepath.Base(path)
-
-		// Skip dispatch_agent.md
-		if baseName == "dispatch_agent.md" {
-			return nil
-		}
-
-		// Read file content
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-
-		contentStr := string(content)
-
-		// Extract tool name from filename (remove .md extension)
-		toolName := strings.TrimSuffix(baseName, filepath.Ext(baseName))
-
-		// Look for JSON schema between triple backticks
-		description := contentStr
-
-		// Find the JSON schema section
-		jsonSchemaStart := strings.Index(contentStr, "```json")
-		if jsonSchemaStart != -1 {
-			// Find the end of the JSON block
-			schemaText := contentStr[jsonSchemaStart+7:]
-			endMarkerIdx := strings.Index(schemaText, "```")
-
-			if endMarkerIdx != -1 {
-				// Extract and parse the JSON schema
-				jsonSchema := schemaText[:endMarkerIdx]
-
-				// Attempt to parse the JSON
-				var toolSchema struct {
-					Name        string          `json:"name"`
-					Description string          `json:"description"`
-					Parameters  json.RawMessage `json:"parameters"`
-				}
-
-				if err := json.Unmarshal([]byte(jsonSchema), &toolSchema); err == nil {
-
-					// Successfully parsed the schema
-					toolsList = append(toolsList, openaiTool{
-						Type: "function",
-						Function: openaiFunction{
-							Name:        toolSchema.Name,
-							Description: toolSchema.Description,
-							Parameters:  toolSchema.Parameters,
-						},
-					})
-					return nil // Skip to the next file
-				} else {
-					fmt.Printf("Failed to parse JSON schema for tool %s: %v\n", toolName, err)
-				}
-			}
-		}
-
-		// If JSON parsing failed or no JSON schema found, use the name and description approach
-		toolsList = append(toolsList, openaiTool{
-			Type: "function",
-			Function: openaiFunction{
-				Name:        toolName,
-				Description: description,
-			},
-		})
-
-		return nil
-	})
-
-	// If tools directory doesn't exist, just return empty values without error
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
+	
+	// Map of tool names to their schema constants and descriptions
+	toolData := map[string]struct {
+		Schema      string
+		Description string
+	}{
+		"View":           {ViewToolSchema, ViewToolDescription},
+		"Replace":        {ReplaceToolSchema, ReplaceToolDescription},
+		"Edit":           {EditToolSchema, EditToolDescription},
+		"Bash":           {BashToolSchema, BashToolDescription},
+		"LS":             {LSToolSchema, LSToolDescription},
+		"FindFilesTool":  {FindFilesToolSchema, FindFilesToolDescription},
+		"dispatch_agent": {DispatchAgentSchema, DispatchAgentDescription},
+		"Fetch":          {FetchToolSchema, FetchToolDescription},
+		"GrepTool":       {GrepToolSchema, GrepToolDescription},
 	}
-
-	fmt.Printf("Loaded %d tools from agent\n", len(toolsList))
+	
+	// Process each tool
+	for toolName, toolInfo := range toolData {
+		// Skip dispatch_agent if needed
+		if toolName == "dispatch_agent" {
+			continue
+		}
+		
+		// Parse the JSON schema
+		var toolSchema struct {
+			Name        string          `json:"name"`
+			Description string          `json:"description"`
+			Parameters  json.RawMessage `json:"parameters"`
+		}
+		
+		if err := json.Unmarshal([]byte(toolInfo.Schema), &toolSchema); err == nil {
+			// Successfully parsed the schema
+			toolsList = append(toolsList, openaiTool{
+				Type: "function",
+				Function: openaiFunction{
+					Name:        toolSchema.Name,
+					Description: toolInfo.Description, // Use the markdown description
+					Parameters:  toolSchema.Parameters,
+				},
+			})
+		} else {
+			fmt.Printf("Failed to parse JSON schema for tool %s: %v\n", toolName, err)
+			
+			// Fallback to just using the name
+			toolsList = append(toolsList, openaiTool{
+				Type: "function",
+				Function: openaiFunction{
+					Name:        toolName,
+					Description: "Tool for " + toolName,
+				},
+			})
+		}
+	}
+	
+	fmt.Printf("Loaded %d tools from schemas\n", len(toolsList))
 	return toolsList, nil
 }
 

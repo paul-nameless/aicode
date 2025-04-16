@@ -2,36 +2,6 @@
 
 Fetches content from a specified URL using curl and returns the HTTP response or any error messages.
 
-```json
-{
-  "name": "Fetch",
-  "description": "Fetches content from a URL and returns the HTTP response or error message.",
-  "parameters": {
-    "type": "object",
-    "required": ["url"],
-    "properties": {
-      "url": {
-        "type": "string",
-        "description": "The URL to fetch content from"
-      },
-      "headers": {
-        "type": "object",
-        "description": "Optional HTTP headers to include in the request"
-      },
-      "method": {
-        "type": "string",
-        "description": "HTTP method to use (GET, POST, PUT, DELETE, etc.). Defaults to GET if not specified.",
-        "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
-      },
-      "data": {
-        "type": "string",
-        "description": "Optional data to send with the request (for POST, PUT, etc.)"
-      }
-    }
-  }
-}
-```
-
 ## Usage notes:
 
 - The url parameter is required and must be a properly formatted URL
