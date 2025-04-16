@@ -37,6 +37,12 @@ type GrepToolParams struct {
 	Include string `json:"include,omitempty"`
 }
 
+// GlobToolParams represents the parameters for the GlobTool
+type GlobToolParams struct {
+	Pattern string `json:"pattern"`
+	Path    string `json:"path,omitempty"`
+}
+
 // GrepResult represents a single file match result
 type GrepResult struct {
 	FilePath string    `json:"file_path"`
@@ -250,6 +256,11 @@ func HandleToolCallsWithResults(toolCalls []toolCall) (string, []ToolCallResult,
 			if err != nil {
 				result = fmt.Sprintf("Error executing GrepTool: %v", err)
 			}
+		case "FindFilesTool":
+			result, err = ExecuteFindFilesTool(toolCall.Function.Arguments)
+			if err != nil {
+				result = fmt.Sprintf("Error executing GlobTool: %v", err)
+			}
 		case "Bash":
 			result, err = ExecuteBashTool(toolCall.Function.Arguments)
 			if err != nil {
@@ -306,6 +317,94 @@ func executeCommand(command string, timeout int) (string, error) {
 	}
 
 	return result, nil
+}
+
+// ExecuteFindFilesTool performs file pattern matching using the find command with path patterns
+func ExecuteFindFilesTool(paramsJSON json.RawMessage) (string, error) {
+	fmt.Printf("DEBUG - Raw glob params received: %s\n", string(paramsJSON))
+
+	// Try multiple approaches to handle potential JSON format issues
+	var params GlobToolParams
+	err := json.Unmarshal(paramsJSON, &params)
+
+	// Try to handle string-encoded JSON if direct unmarshaling fails
+	if err != nil {
+		var strArg string
+		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
+			// We got a string, check if it's JSON
+			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
+				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
+				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
+					// Successfully parsed
+					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
+				} else {
+					// Both approaches failed
+					return "", fmt.Errorf("failed to parse glob tool parameters: %v (from string: %v)", err, err3)
+				}
+			} else {
+				// It's a simple string, assume it's just the pattern
+				params.Pattern = strArg
+				fmt.Printf("DEBUG - Treating as simple pattern: %s\n", strArg)
+			}
+		} else {
+			// Both approaches failed
+			return "", fmt.Errorf("failed to parse glob tool parameters: %v", err)
+		}
+	}
+
+	// Validate parameters
+	if params.Pattern == "" {
+		return "", fmt.Errorf("pattern parameter is required")
+	}
+
+	// Default path to current directory if not provided
+	if params.Path == "" {
+		var err error
+		params.Path, err = os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("failed to get current directory: %v", err)
+		}
+	}
+
+	// Escape the pattern for shell use
+	escapedPattern := strings.ReplaceAll(params.Pattern, "'", "'\\''")
+	escapedPath := strings.ReplaceAll(params.Path, "'", "'\\''")
+
+	// Construct the find command
+	cmd := fmt.Sprintf("find '%s' -type f -path '*%s'",
+		escapedPath, escapedPattern)
+
+	// Execute the command
+	result, err := executeCommand(cmd, 0)
+	if err != nil {
+		return "", fmt.Errorf("error executing glob command: %v", err)
+	}
+
+	// Format the results
+	if result == "" {
+		return "No files found matching the pattern.", nil
+	}
+
+	return result, nil
+
+	// 	// Split the result into lines
+	// 	lines := strings.Split(strings.TrimSpace(result), "\n")
+
+	// 	var sb strings.Builder
+	// 	sb.WriteString(fmt.Sprintf("Found %d files matching pattern '%s':\n\n", len(lines), params.Pattern))
+
+	// 	// Limit the number of files to display
+	// 	maxFilesToShow := 100
+	// 	for i, line := range lines {
+	// 		if i >= maxFilesToShow {
+	// 			remaining := len(lines) - maxFilesToShow
+	// 			sb.WriteString(fmt.Sprintf("\n... and %d more files not shown\n", remaining))
+	// 			break
+	// 		}
+	// 		sb.WriteString(fmt.Sprintf("%s\n", line))
+	// 	}
+
+	// return sb.String(), nil
 }
 
 // ExecuteBashTool executes a bash command in a persistent shell session
