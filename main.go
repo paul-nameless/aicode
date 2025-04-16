@@ -122,7 +122,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				// Send to OpenAI and get response
-				response, err := AskLlm(model, input)
+				messages := getConversationHistory()
+				response, err := AskLlm(model, messages)
 				if err != nil {
 					return entry{
 						raw:      fmt.Sprintf("Error: %v", err),
@@ -239,7 +240,6 @@ func (m model) View() string {
 // runSimpleMode processes a single prompt in non-interactive mode
 func runSimpleMode(prompt string) {
 	// Update conversation history with the user prompt
-	UpdateConversationHistory(prompt, "user")
 
 	// Get model from environment variable or use default
 	model := os.Getenv("OPENAI_MODEL")
@@ -248,7 +248,11 @@ func runSimpleMode(prompt string) {
 	}
 
 	// Send to OpenAI and get response
-	response, err := AskLlm(model, prompt)
+	UpdateConversationHistory(prompt, "user")
+
+	messages := getConversationHistory()
+
+	response, err := AskLlm(model, messages)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
