@@ -26,11 +26,6 @@ func runSimpleMode(prompt string, llm Llm) {
 			os.Exit(1)
 		}
 
-		// Print token usage if available
-		if claude, ok := llm.(*Claude); ok {
-			fmt.Printf("Tokens used: %d input, %d output\n", claude.InputTokens, claude.OutputTokens)
-		}
-
 		// Check if we have tool calls
 		if len(inferenceResponse.ToolCalls) == 0 {
 			// No tool calls, print the response and exit
@@ -118,9 +113,10 @@ func runInteractiveMode(llm Llm) {
 			messages = ConvertToInterfaces(history)
 		}
 
-		// Print token usage if available
+		// Print token usage and price if available
 		if claude, ok := llm.(*Claude); ok {
-			fmt.Printf("Tokens used: %d input, %d output\n", claude.InputTokens, claude.OutputTokens)
+			price := claude.CalculatePrice()
+			fmt.Printf("Tokens: %d input, %d output. Cost: $%.2f\n", claude.InputTokens, claude.OutputTokens, price)
 		}
 		fmt.Println(strings.Repeat("━", 64))
 	}

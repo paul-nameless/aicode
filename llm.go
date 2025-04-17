@@ -24,6 +24,7 @@ type Llm interface {
 	Inference(messages []interface{}) (InferenceResponse, error)
 	// Init initializes the LLM provider
 	Init() error
+	CalculatePrice() float64
 }
 
 // ContentBlock represents a block of content in a message (text or tool related)

@@ -212,7 +212,7 @@ func (c *Claude) Inference(messages []interface{}) (InferenceResponse, error) {
 	if out.Error != nil {
 		return InferenceResponse{}, errors.New(out.Error.Message)
 	}
-	
+
 	// Accumulate token usage
 	c.InputTokens += out.Usage.InputTokens
 	c.OutputTokens += out.Usage.OutputTokens
@@ -357,9 +357,18 @@ func (c *Claude) executeTool(toolName string, toolInput json.RawMessage) (string
 
 // Claude struct implements Llm interface
 type Claude struct {
-	Model        string
-	InputTokens  int // Track total input tokens used
-	OutputTokens int // Track total output tokens used
+	Model                 string
+	InputTokens           int     // Track total input tokens used
+	OutputTokens          int     // Track total output tokens used
+	InputPricePerMillion  float64 // Price per million input tokens
+	OutputPricePerMillion float64 // Price per million output tokens
+}
+
+// CalculatePrice calculates the price for Claude API usage
+func (c *Claude) CalculatePrice() float64 {
+	inputPrice := float64(c.InputTokens) * c.InputPricePerMillion / 1000000.0
+	outputPrice := float64(c.OutputTokens) * c.OutputPricePerMillion / 1000000.0
+	return inputPrice + outputPrice
 }
 
 // NewClaude creates a new Claude provider
@@ -369,9 +378,11 @@ func NewClaude() *Claude {
 		model = "claude-3-opus-20240229"
 	}
 	return &Claude{
-		Model:        model,
-		InputTokens:  0,
-		OutputTokens: 0,
+		Model:                 model,
+		InputTokens:           0,
+		OutputTokens:          0,
+		InputPricePerMillion:  3.0,  // $3 per million input tokens
+		OutputPricePerMillion: 15.0, // $15 per million output tokens
 	}
 }
 

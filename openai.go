@@ -131,6 +131,10 @@ type ToolResultMessage struct {
 	Content    string `json:"content"`
 }
 
+func (o *OpenAI) CalculatePrice() float64 {
+	return 0
+}
+
 // Inference implements the Llm interface for OpenAI
 func (o *OpenAI) Inference(messages []interface{}) (InferenceResponse, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
