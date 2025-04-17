@@ -95,8 +95,6 @@ func parseToolParams[T any](paramsJSON json.RawMessage, simpleStringField string
 }
 
 func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
-	fmt.Printf("DEBUG - Raw params received: %s\n", string(paramsJSON))
-
 	params, err := parseToolParams[GrepToolParams](paramsJSON, "Pattern")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse grep tool parameters: %v", err)
@@ -106,9 +104,6 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 	if params.Pattern == "" {
 		return "", fmt.Errorf("pattern parameter is required")
 	}
-
-	fmt.Printf("DEBUG - Using pattern: %s, path: %s, include: %s\n",
-		params.Pattern, params.Path, params.Include)
 
 	// Default path to current directory if not provided
 	if params.Path == "" {
@@ -348,7 +343,6 @@ func executeCommand(command string, timeout int) (string, error) {
 		if timeout > 600000 {
 			timeout = 600000
 		}
-		fmt.Printf("DEBUG - Using timeout value: %d ms\n", timeout)
 	}
 
 	// Create a command to execute the bash command
@@ -371,8 +365,6 @@ func executeCommand(command string, timeout int) (string, error) {
 
 // ExecuteFindFilesTool performs file pattern matching using the fd command with path patterns
 func ExecuteFindFilesTool(paramsJSON json.RawMessage) (string, error) {
-	fmt.Printf("DEBUG - Raw glob params received: %s\n", string(paramsJSON))
-
 	params, err := parseToolParams[GlobToolParams](paramsJSON, "Pattern")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse glob tool parameters: %v", err)
@@ -590,8 +582,6 @@ func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
 
 // ExecuteFetchTool fetches content from a URL using curl
 func ExecuteFetchTool(paramsJSON json.RawMessage) (string, error) {
-	fmt.Printf("DEBUG - Raw fetch params received: %s\n", string(paramsJSON))
-
 	params, err := parseToolParams[FetchToolParams](paramsJSON, "URL")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse fetch tool parameters: %v", err)

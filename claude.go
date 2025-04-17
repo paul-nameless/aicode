@@ -320,7 +320,7 @@ func convertToClaudeContent(content interface{}) interface{} {
 
 // executeTool runs the actual tool implementation
 func (c *Claude) executeTool(toolName string, toolInput json.RawMessage) (string, error) {
-	fmt.Printf("    tool: %s(%s)\n", toolName, string(toolInput))
+	fmt.Printf("  tool: %s(%s)\n", toolName, string(toolInput))
 
 	var result string
 	var err error
