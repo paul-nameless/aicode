@@ -4,9 +4,9 @@ version: "3"
 
 tasks:
   b:
-    - go build . && ANTHROPIC_MODEL=claude-3-7-sonnet-20250219 ANTHROPIC_API_KEY=$(pass show i/aicode-claude-api-key| head -n 1) ./aicode
-  a:
     - go build . && ANTHROPIC_MODEL=claude-3-7-sonnet-20250219 ANTHROPIC_API_KEY=$(pass show i/aicode-claude-api-key| head -n 1) ./aicode {{.CLI_ARGS}}
+  a:
+    - go build . && ANTHROPIC_API_URL=http://localhost:8084 ANTHROPIC_MODEL=claude-3-7-sonnet-20250219 ANTHROPIC_API_KEY=$(pass show i/aicode-claude-api-key| head -n 1) ./aicode {{.CLI_ARGS}}
 
   default:
     - go build . && OPENAI_API_KEY=$(pass show i/openai.com-api-key| head -n 1) ./aicode

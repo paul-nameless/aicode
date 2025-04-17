@@ -324,7 +324,7 @@ func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult,
 			Output: result,
 		})
 
-		toolResponse.WriteString(fmt.Sprintf("\nResult:\n%s\n\n", result))
+		toolResponse.WriteString(fmt.Sprintf("\n    ->%s\n", result))
 	}
 
 	// Print the results to stdout for debugging
@@ -486,8 +486,6 @@ func ExecuteLsTool(paramsJSON json.RawMessage) (string, error) {
 
 // ExecuteBashTool executes a bash command in a persistent shell session
 func ExecuteBashTool(paramsJSON json.RawMessage) (string, error) {
-	fmt.Printf("DEBUG - Raw bash params received: %s\n", string(paramsJSON))
-
 	params, err := parseToolParams[BashToolParams](paramsJSON, "Command")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse bash tool parameters: %v", err)
