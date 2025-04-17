@@ -198,11 +198,11 @@ func (c *Claude) Inference(model string, messages []interface{}) (InferenceRespo
 	body, _ := io.ReadAll(resp.Body)
 
 	// For debugging
-	if len(body) > 200 {
-		fmt.Printf("Claude response (first 200 chars): %s...\n", string(body[:200]))
-	} else {
-		fmt.Printf("Claude response: %s\n", string(body))
-	}
+	// if len(body) > 200 {
+	// 	fmt.Printf("Claude response (first 200 chars): %s...\n", string(body[:200]))
+	// } else {
+	// 	fmt.Printf("Claude response: %s\n", string(body))
+	// }
 
 	var out claudeResponse
 	if err := json.Unmarshal(body, &out); err != nil {

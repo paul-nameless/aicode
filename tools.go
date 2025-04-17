@@ -12,14 +12,12 @@ import (
 	"time"
 )
 
-// Import the toolCall type from openai.go
 type toolCall struct {
 	ID       string           `json:"id"`
 	Type     string           `json:"type"`
 	Function toolCallFunction `json:"function"`
 }
 
-// BashToolParams represents the parameters for the BashTool
 type BashToolParams struct {
 	Command     string `json:"command"`
 	Timeout     int    `json:"timeout,omitempty"`
@@ -31,35 +29,28 @@ type toolCallFunction struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
-// GrepToolParams represents the parameters for the GrepTool
 type GrepToolParams struct {
 	Pattern string `json:"pattern"`
 	Path    string `json:"path,omitempty"`
 	Include string `json:"include,omitempty"`
 }
 
-// GlobToolParams represents the parameters for the GlobTool
 type GlobToolParams struct {
 	Pattern string `json:"pattern"`
 	Path    string `json:"path,omitempty"`
 }
 
-// LsToolParams represents the parameters for the LsTool
 type LsToolParams struct {
 	Path   string   `json:"path"`
 	Ignore []string `json:"ignore,omitempty"`
 }
 
-// GrepResult represents a single file match result
 type GrepResult struct {
 	FilePath string    `json:"file_path"`
 	Matches  []string  `json:"matches"`
-	ModTime  time.Time `json:"-"` // Used for sorting, not exported in JSON
+	ModTime  time.Time `json:"-"`
 }
 
-// parseToolParams is a generic function to parse tool parameters from JSON
-// It handles direct JSON, string-encoded JSON, and simple string values
-// For simple strings, it sets the value to the specified field name
 func parseToolParams[T any](paramsJSON json.RawMessage, simpleStringField string) (T, error) {
 	var params T
 
@@ -103,7 +94,6 @@ func parseToolParams[T any](paramsJSON json.RawMessage, simpleStringField string
 	return params, nil
 }
 
-// ExecuteGrepTool performs a grep-like search in files using ripgrep (rg)
 func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 	fmt.Printf("DEBUG - Raw params received: %s\n", string(paramsJSON))
 
@@ -151,7 +141,6 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 	return result, nil
 }
 
-// searchFiles recursively searches files matching the include pattern for content matching the regex pattern
 func searchFiles(rootPath string, pattern *regexp.Regexp, includePattern string) ([]GrepResult, error) {
 	var results []GrepResult
 
@@ -250,7 +239,6 @@ func searchFiles(rootPath string, pattern *regexp.Regexp, includePattern string)
 	return results, err
 }
 
-// FetchToolParams represents the parameters for the FetchTool
 type FetchToolParams struct {
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers,omitempty"`
@@ -258,7 +246,6 @@ type FetchToolParams struct {
 	Data    string            `json:"data,omitempty"`
 }
 
-// EditToolParams represents the parameters for the EditTool
 type EditToolParams struct {
 	FilePath             string `json:"file_path"`
 	OldString            string `json:"old_string"`
@@ -266,19 +253,16 @@ type EditToolParams struct {
 	ExpectedReplacements int    `json:"expected_replacements,omitempty"`
 }
 
-// ToolCallResult represents the result of a tool call
 type ToolCallResult struct {
 	CallID string
 	Output string
 }
 
-// HandleToolCalls processes tool calls from the LLM response (original function kept for backward compatibility)
 func HandleToolCalls(toolCalls []ToolCall) (string, error) {
 	response, _, err := HandleToolCallsWithResults(toolCalls)
 	return response, err
 }
 
-// HandleToolCallsWithResults processes tool calls and returns both formatted response and structured results
 func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult, error) {
 	var toolResponse strings.Builder
 
@@ -349,13 +333,8 @@ func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult,
 	return toolResponse.String(), results, nil
 }
 
-// executeCommand runs a shell command and returns its output
 func executeCommand(command string, timeout int) (string, error) {
-	// Set default timeout if not provided
-	// Note: Currently we don't implement timeouts in this version
-	// but log the value for future implementation
 	if timeout > 0 {
-		// Ensure timeout doesn't exceed max allowed (10 minutes)
 		if timeout > 600000 {
 			timeout = 600000
 		}
@@ -668,16 +647,6 @@ func ExecuteEditTool(paramsJSON json.RawMessage) (string, error) {
 	// Validate parameters
 	if params.FilePath == "" {
 		return "", fmt.Errorf("file_path parameter is required")
-	}
-
-	// Handle relative paths by joining with current directory if not absolute
-	if !strings.HasPrefix(params.FilePath, "/") {
-		currentDir, err := os.Getwd()
-		if err != nil {
-			return "", fmt.Errorf("failed to get current directory: %v", err)
-		}
-		params.FilePath = filepath.Join(currentDir, params.FilePath)
-		fmt.Printf("DEBUG - Converted to absolute path: %s\n", params.FilePath)
 	}
 
 	// For creating a new file, old_string can be empty
