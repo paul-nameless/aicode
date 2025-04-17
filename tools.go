@@ -255,24 +255,21 @@ type ToolCallResult struct {
 }
 
 // HandleToolCalls processes tool calls from the LLM response (original function kept for backward compatibility)
-func HandleToolCalls(toolCalls []toolCall) (string, error) {
+func HandleToolCalls(toolCalls []ToolCall) (string, error) {
 	response, _, err := HandleToolCallsWithResults(toolCalls)
 	return response, err
 }
 
 // HandleToolCallsWithResults processes tool calls and returns both formatted response and structured results
-func HandleToolCallsWithResults(toolCalls []toolCall) (string, []ToolCallResult, error) {
+func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult, error) {
 	var toolResponse strings.Builder
-	toolResponse.WriteString("Tool calls detected:\n\n")
 
 	var results []ToolCallResult
 
 	for _, toolCall := range toolCalls {
-		toolName := toolCall.Function.Name
+		toolName := toolCall.Name
 
-		toolResponse.WriteString(fmt.Sprintf("Tool: %s\nArguments: %s\n",
-			toolName,
-			string(toolCall.Function.Arguments)))
+		toolResponse.WriteString(fmt.Sprintf("tool: %s(%s)\n", toolName, string(toolCall.Input)))
 
 		// Execute the tool based on the name
 		var result string
@@ -280,37 +277,37 @@ func HandleToolCallsWithResults(toolCalls []toolCall) (string, []ToolCallResult,
 
 		switch toolName {
 		case "GrepTool":
-			result, err = ExecuteGrepTool(toolCall.Function.Arguments)
+			result, err = ExecuteGrepTool(toolCall.Input)
 			if err != nil {
 				result = fmt.Sprintf("Error executing GrepTool: %v", err)
 			}
 		case "FindFilesTool":
-			result, err = ExecuteFindFilesTool(toolCall.Function.Arguments)
+			result, err = ExecuteFindFilesTool(toolCall.Input)
 			if err != nil {
 				result = fmt.Sprintf("Error executing GlobTool: %v", err)
 			}
 		case "Bash":
-			result, err = ExecuteBashTool(toolCall.Function.Arguments)
+			result, err = ExecuteBashTool(toolCall.Input)
 			if err != nil {
 				result = fmt.Sprintf("Error executing Bash: %v", err)
 			}
 		case "LS":
-			result, err = ExecuteLsTool(toolCall.Function.Arguments)
+			result, err = ExecuteLsTool(toolCall.Input)
 			if err != nil {
 				result = fmt.Sprintf("Error executing LS: %v", err)
 			}
 		case "View":
-			result, err = ExecuteViewTool(toolCall.Function.Arguments)
+			result, err = ExecuteViewTool(toolCall.Input)
 			if err != nil {
 				result = fmt.Sprintf("Error executing View: %v", err)
 			}
 		case "Edit":
-			result, err = ExecuteEditTool(toolCall.Function.Arguments)
+			result, err = ExecuteEditTool(toolCall.Input)
 			if err != nil {
 				result = fmt.Sprintf("Error executing Edit: %v", err)
 			}
 		case "Fetch":
-			result, err = ExecuteFetchTool(toolCall.Function.Arguments)
+			result, err = ExecuteFetchTool(toolCall.Input)
 			if err != nil {
 				result = fmt.Sprintf("Error executing Fetch: %v", err)
 			}
@@ -336,8 +333,6 @@ func HandleToolCallsWithResults(toolCalls []toolCall) (string, []ToolCallResult,
 
 // executeCommand runs a shell command and returns its output
 func executeCommand(command string, timeout int) (string, error) {
-	fmt.Printf("DEBUG - Executing command: %s, timeout: %d\n", command, timeout)
-
 	// Set default timeout if not provided
 	// Note: Currently we don't implement timeouts in this version
 	// but log the value for future implementation
@@ -457,8 +452,6 @@ func ExecuteFindFilesTool(paramsJSON json.RawMessage) (string, error) {
 
 // ExecuteLsTool lists files and directories in a given path using the shell ls command
 func ExecuteLsTool(paramsJSON json.RawMessage) (string, error) {
-	fmt.Printf("DEBUG - Raw ls params received: %s\n", string(paramsJSON))
-
 	// Try multiple approaches to handle potential JSON format issues
 	var params LsToolParams
 	err := json.Unmarshal(paramsJSON, &params)
@@ -593,8 +586,6 @@ type ViewToolParams struct {
 
 // ExecuteViewTool reads a file from the filesystem with optional offset and limit
 func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
-	fmt.Printf("DEBUG - Raw view params received: %s\n", string(paramsJSON))
-
 	// Try multiple approaches to handle potential JSON format issues
 	var params ViewToolParams
 	err := json.Unmarshal(paramsJSON, &params)

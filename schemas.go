@@ -31,7 +31,6 @@ var fetchToolFile string
 //go:embed tools/grep.md
 var grepToolFile string
 
-
 // Tool descriptions loaded from markdown files
 var (
 	ViewToolDescription      = viewToolFile

@@ -13,7 +13,10 @@ import (
 	"github.com/charmbracelet/glamour"
 )
 
-const defaultModel = "gpt-4.1-nano"
+const (
+	defaultOpenAIModel = "gpt-4.1-nano"
+	defaultClaudeModel = "claude-3-haiku-20240307"
+)
 
 type entry struct {
 	raw      string
@@ -26,6 +29,7 @@ type model struct {
 	viewport  viewport.Model
 	entries   []entry
 	ready     bool
+	llm       Llm
 }
 
 func initialModel() model {
@@ -34,10 +38,19 @@ func initialModel() model {
 	ti.Focus()
 	ti.Width = 80
 
+	// Default to OpenAI
+	var llm Llm
+	if os.Getenv("ANTHROPIC_API_KEY") != "" {
+		llm = NewClaude()
+	} else {
+		llm = NewOpenAI()
+	}
+
 	return model{
 		textInput: ti,
 		entries:   []entry{},
 		ready:     false,
+		llm:       llm,
 	}
 }
 
@@ -108,49 +121,81 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				role:     "user",
 			})
 
-			// Update conversation history in openai.go
-			UpdateConversationHistory(input, "user")
+			// Update conversation history
+			UpdateConversationHistoryText(input, "user")
 
 			// Update viewport content
 			m.updateViewportContent()
 
-			// Send input to OpenAI API
+			// Send input to LLM
 			return m, func() tea.Msg {
 				// Get model from environment variable or use default
-				model := os.Getenv("OPENAI_MODEL")
-				if model == "" {
-					model = defaultModel
-				}
+				model := getModelForProvider(m.llm)
 
-				// Send to OpenAI and get response
-				messages := getConversationHistory()
-				response, err := AskLlm(model, messages)
-				if err != nil {
-					return entry{
-						raw:      fmt.Sprintf("Error: %v", err),
-						rendered: fmt.Sprintf("Error: %v", err),
-						role:     "assistant",
+				// Get conversation history and convert to interfaces
+				history := GetConversationHistory()
+				messages := ConvertToInterfaces(history)
+
+				// Process the initial request and any tool calls
+				var finalResponse string
+				for {
+					// Get response from LLM
+					inferenceResponse, err := m.llm.Inference(model, messages)
+					if err != nil {
+						return entry{
+							raw:      fmt.Sprintf("Error: %v", err),
+							rendered: fmt.Sprintf("Error: %v", err),
+							role:     "assistant",
+						}
 					}
+
+					// Check if we have tool calls
+					if len(inferenceResponse.ToolCalls) == 0 {
+						// No tool calls, use this as our final response
+						finalResponse = inferenceResponse.Content
+						UpdateConversationHistoryText(finalResponse, "assistant")
+						break
+					}
+
+					// Process tool calls
+					_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls)
+					if err != nil {
+						return entry{
+							raw:      fmt.Sprintf("Error handling tool calls: %v", err),
+							rendered: fmt.Sprintf("Error handling tool calls: %v", err),
+							role:     "assistant",
+						}
+					}
+
+					// Add tool results to conversation history
+					for _, result := range toolResults {
+						// Add tool result to conversation history
+						AddToolResultToHistory(result.CallID, result.Output)
+					}
+
+					// Refresh the messages from conversation history
+					history = GetConversationHistory()
+					messages = ConvertToInterfaces(history)
 				}
 
-				renderedResponse, err := renderer.Render(response)
+				renderedResponse, err := renderer.Render(finalResponse)
 				if err != nil {
-					renderedResponse = "\n" + response
+					renderedResponse = "\n" + finalResponse
 				}
 
 				return entry{
-					raw:      response,
+					raw:      finalResponse,
 					rendered: renderedResponse,
 					role:     "assistant",
 				}
 			}
 		}
 	case entry:
-		// Handle the response from AskLlm
+		// Handle the response from LLM
 		m.entries = append(m.entries, msg)
 
-		// Update conversation history in openai.go
-		UpdateConversationHistory(msg.raw, msg.role)
+		// Update conversation history
+		UpdateConversationHistoryText(msg.raw, msg.role)
 		m.updateViewportContent()
 		return m, nil
 	}
@@ -239,38 +284,58 @@ func (m model) View() string {
 }
 
 // runSimpleMode processes a single prompt in non-interactive mode
-func runSimpleMode(prompt string) {
+func runSimpleMode(prompt string, llm Llm) {
 	// Update conversation history with the user prompt
+	UpdateConversationHistoryText(prompt, "user")
 
-	// Get model from environment variable or use default
-	model := os.Getenv("OPENAI_MODEL")
-	if model == "" {
-		model = defaultModel
+	// Get model from environment variable or use default based on provider
+	model := getModelForProvider(llm)
+
+	// Convert conversation history to interfaces
+	history := GetConversationHistory()
+	messages := ConvertToInterfaces(history)
+
+	// Process the initial request and any tool calls
+	for {
+		// Get response from LLM
+		inferenceResponse, err := llm.Inference(model, messages)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Check if we have tool calls
+		if len(inferenceResponse.ToolCalls) == 0 {
+			// No tool calls, print the response and exit
+			fmt.Println(inferenceResponse.Content)
+			UpdateConversationHistoryText(inferenceResponse.Content, "assistant")
+			break
+		}
+
+		// Process tool calls
+		_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error handling tool calls: %v\n", err)
+			break
+		}
+
+		// Add tool results to conversation history
+		for _, result := range toolResults {
+			// Add tool result to conversation history
+			AddToolResultToHistory(result.CallID, result.Output)
+		}
+
+		// Refresh the messages from conversation history
+		history = GetConversationHistory()
+		messages = ConvertToInterfaces(history)
 	}
-
-	// Send to OpenAI and get response
-	UpdateConversationHistory(prompt, "user")
-
-	messages := getConversationHistory()
-
-	response, err := AskLlm(model, messages)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Print the response
-	fmt.Println(response)
 }
 
-// runNonInteractiveMode reads user input in a loop until Ctrl+C/D
-func runInteractiveMode() {
-	// Get model from environment variable or use default
-	model := os.Getenv("OPENAI_MODEL")
-	if model == "" {
-		model = defaultModel
+// runInteractiveMode reads user input in a loop until Ctrl+C/D
+func runInteractiveMode(llm Llm) {
+	// Get model from environment variable or use default based on provider
+	model := getModelForProvider(llm)
 
-	}
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Print("> ")
@@ -284,18 +349,47 @@ func runInteractiveMode() {
 			continue
 		}
 
-		// Send to OpenAI and get response
-		UpdateConversationHistory(input, "user")
-		messages := getConversationHistory()
+		// Send to LLM and get response
+		UpdateConversationHistoryText(input, "user")
 
-		response, err := AskLlm(model, messages)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			continue
+		// Convert conversation history to interfaces
+		history := GetConversationHistory()
+		messages := ConvertToInterfaces(history)
+
+		// Process the initial request and any tool calls
+		for {
+			// Get response from LLM
+			inferenceResponse, err := llm.Inference(model, messages)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				break
+			}
+
+			// Check if we have tool calls
+			if len(inferenceResponse.ToolCalls) == 0 {
+				// No tool calls, print the response and continue the outer loop
+				fmt.Println(inferenceResponse.Content)
+				UpdateConversationHistoryText(inferenceResponse.Content, "assistant")
+				break
+			}
+
+			// Process tool calls
+			_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error handling tool calls: %v\n", err)
+				break
+			}
+
+			// Add tool results to conversation history
+			for _, result := range toolResults {
+				// Add tool result to conversation history
+				AddToolResultToHistory(result.CallID, result.Output)
+			}
+
+			// Refresh the messages from conversation history
+			history = GetConversationHistory()
+			messages = ConvertToInterfaces(history)
 		}
-
-		// Print the response
-		fmt.Println(response)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -304,14 +398,60 @@ func runInteractiveMode() {
 	}
 }
 
+// getModelForProvider returns the appropriate model name based on the LLM provider
+func getModelForProvider(llm Llm) string {
+	switch llm.(type) {
+	case *Claude:
+		model := os.Getenv("ANTHROPIC_MODEL")
+		if model == "" {
+			model = defaultClaudeModel
+		}
+		return model
+	case *OpenAI:
+		model := os.Getenv("OPENAI_MODEL")
+		if model == "" {
+			model = defaultOpenAIModel
+		}
+		return model
+	default:
+		return defaultOpenAIModel
+	}
+}
+
+// initLLM initializes the appropriate LLM provider based on available API keys
+func initLLM() (Llm, error) {
+	var llm Llm
+
+	// Choose provider based on available API keys
+	if os.Getenv("ANTHROPIC_API_KEY") != "" {
+		llm = NewClaude()
+	} else {
+		llm = NewOpenAI()
+	}
+
+	// Initialize the provider
+	if err := llm.Init(); err != nil {
+		return nil, err
+	}
+
+	return llm, nil
+}
+
 func main() {
 	// Parse command line flags
 	quietFlag := flag.Bool("q", false, "Run in simple mode with a single prompt")
 	flag.Parse()
 
-	// Load context at startup
-	if err := LoadContext(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to load context: %v\n", err)
+	// Initialize context and load system prompts
+	if err := InitContext(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize context: %v\n", err)
+	}
+
+	// Initialize LLM provider
+	llm, err := initLLM()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize LLM provider: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Check if quiet flag is set
@@ -326,10 +466,10 @@ func main() {
 
 		// Join all arguments as the prompt
 		prompt := strings.Join(args, " ")
-		runSimpleMode(prompt)
+		runSimpleMode(prompt, llm)
 		return
 	} else {
-		runInteractiveMode()
+		runInteractiveMode(llm)
 		os.Exit(1)
 	}
 

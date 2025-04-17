@@ -10,8 +10,7 @@ import (
 	"os"
 )
 
-// Global variables
-var conversationHistory []openaiMessage
+// Global variables for OpenAI
 var tools []openaiTool // Store the tools loaded at startup
 
 type openaiRequest struct {
@@ -31,11 +30,6 @@ type openaiFunction struct {
 	Parameters  json.RawMessage `json:"parameters,omitempty"`
 }
 
-type openaiMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
 type openaiResponse struct {
 	Choices []struct {
 		Message struct {
@@ -49,13 +43,8 @@ type openaiResponse struct {
 	} `json:"error,omitempty"`
 }
 
-// getConversationHistory returns the conversation history as OpenAI messages
-func getConversationHistory() []openaiMessage {
-	return conversationHistory
-}
-
-// loadTools loads tools using the schema constants defined in tools.go
-func loadTools() ([]openaiTool, error) {
+// loadOpenAITools loads tools using the schema constants defined in tools.go
+func loadOpenAITools() ([]openaiTool, error) {
 	var toolsList []openaiTool
 
 	// Map of tool names to their schema constants and descriptions
@@ -115,27 +104,14 @@ func loadTools() ([]openaiTool, error) {
 	return toolsList, nil
 }
 
-// LoadContext loads system messages and tools
+// LoadOpenAIContext loads tools for OpenAI
 // This should be called once at startup
-func LoadContext() error {
+func LoadOpenAIContext() error {
 	// Load tools
 	var err error
-	tools, err = loadTools()
+	tools, err = loadOpenAITools()
 	if err != nil {
 		return err
-	}
-
-	UpdateConversationHistory(defaultSystemPrompt, "system")
-
-	// Check for AI.md file
-	if aiContent, err := os.ReadFile("AI.md"); err == nil {
-		// Add AI.md content as system message
-		UpdateConversationHistory(string(aiContent), "system")
-	}
-
-	if claudeContent, err := os.ReadFile("CLAUDE.md"); err == nil {
-		// Add CLAUDE.md content as system message
-		UpdateConversationHistory(string(claudeContent), "system")
 	}
 
 	return nil
@@ -155,13 +131,11 @@ type ToolResultMessage struct {
 	Content    string `json:"content"`
 }
 
-// AskLlm sends a prompt to OpenAI's API and returns the response.
-// model: for example, "gpt-3.5-turbo" or "gpt-4"
-// prompt: your user input
-func AskLlm(model string, messages []openaiMessage) (string, error) {
+// Inference implements the Llm interface for OpenAI
+func (o *OpenAI) Inference(model string, messages []interface{}) (InferenceResponse, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		return "", errors.New("OPENAI_API_KEY environment variable not set")
+		return InferenceResponse{}, errors.New("OPENAI_API_KEY environment variable not set")
 	}
 
 	// Get base URL from environment variable or use default
@@ -170,159 +144,189 @@ func AskLlm(model string, messages []openaiMessage) (string, error) {
 		baseURL = "https://api.openai.com"
 	}
 
-	// Convert messages to interface{} slice
-	var messagesInterface []interface{}
-	for _, msg := range messages {
-		messagesInterface = append(messagesInterface, map[string]interface{}{
-			"role":    msg.Role,
-			"content": msg.Content,
-		})
-	}
+	// Convert content blocks to OpenAI format if needed
+	convertedMessages := convertMessagesToOpenAIFormat(messages)
 
 	url := baseURL + "/v1/chat/completions"
 	reqBody := openaiRequest{
 		Model:    model,
-		Messages: messagesInterface,
+		Messages: convertedMessages,
 		Tools:    tools,
 	}
 	bodyBytes, _ := json.Marshal(&reqBody)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(bodyBytes))
 	if err != nil {
-		return "", err
+		return InferenceResponse{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return InferenceResponse{}, err
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 
+	// Debug output
+	if len(body) > 200 {
+		fmt.Printf("OpenAI response (first 200 chars): %s...\n", string(body[:200]))
+	} else {
+		fmt.Printf("OpenAI response: %s\n", string(body))
+	}
+
 	var out openaiResponse
 	if err := json.Unmarshal(body, &out); err != nil {
-		return "", err
+		return InferenceResponse{}, err
 	}
 	if out.Error != nil {
-		return "", errors.New(out.Error.Message)
+		return InferenceResponse{}, errors.New(out.Error.Message)
 	}
 	if len(out.Choices) == 0 {
-		return "", errors.New("no choices in OpenAI response")
+		return InferenceResponse{}, errors.New("no choices in OpenAI response")
 	}
 
-	// Check if the response contains tool calls
-	if len(out.Choices[0].Message.ToolCalls) > 0 {
-		// Initialize conversation for tool calls
-		var conversationMessages []interface{}
-
-		// Copy all previous messages
-		for _, msg := range messages {
-			conversationMessages = append(conversationMessages, map[string]interface{}{
-				"role":    msg.Role,
-				"content": msg.Content,
-			})
-		}
-
-		// Maximum number of iterations to prevent infinite loops
-		maxIterations := 100
-		currentIteration := 0
-
-		// Continue processing tool calls until there are none left or we hit the max iterations
-		currentResponse := out
-		for len(currentResponse.Choices[0].Message.ToolCalls) > 0 && currentIteration < maxIterations {
-			currentIteration++
-
-			// Process the current tool calls
-			toolCallsResult, toolResults, err := HandleToolCallsWithResults(currentResponse.Choices[0].Message.ToolCalls)
-			if err != nil {
-				return "", err
-			}
-
-			// If we don't have any tool results, just return the tool calls result
-			if len(toolResults) == 0 {
-				return toolCallsResult, nil
-			}
-
-			// Add assistant message with tool calls
-			conversationMessages = append(conversationMessages, map[string]interface{}{
-				"role":       "assistant",
-				"tool_calls": currentResponse.Choices[0].Message.ToolCalls,
-			})
-
-			// Add tool results
-			for _, result := range toolResults {
-				conversationMessages = append(conversationMessages, map[string]interface{}{
-					"role":         "tool",
-					"tool_call_id": result.CallID,
-					"content":      result.Output,
-				})
-			}
-
-			// Make a follow-up request with tool results
-			followupReqBody := openaiRequest{
-				Model:    model,
-				Messages: conversationMessages,
-				Tools:    tools,
-			}
-
-			followupBodyBytes, _ := json.Marshal(&followupReqBody)
-			followupReq, err := http.NewRequest("POST", baseURL+"/v1/chat/completions", bytes.NewBuffer(followupBodyBytes))
-			if err != nil {
-				return toolCallsResult, nil // Fall back to just showing tool calls result
-			}
-
-			followupReq.Header.Set("Content-Type", "application/json")
-			followupReq.Header.Set("Authorization", "Bearer "+apiKey)
-
-			followupResp, err := http.DefaultClient.Do(followupReq)
-			if err != nil {
-				return toolCallsResult, nil // Fall back to just showing tool calls result
-			}
-
-			followupBody, _ := io.ReadAll(followupResp.Body)
-			followupResp.Body.Close()
-
-			var followupOut openaiResponse
-			if err := json.Unmarshal(followupBody, &followupOut); err != nil {
-				return toolCallsResult, nil // Fall back to just showing tool calls result
-			}
-
-			if followupOut.Error != nil {
-				return toolCallsResult, nil // Fall back to just showing tool calls result
-			}
-
-			if len(followupOut.Choices) == 0 {
-				return toolCallsResult, nil // Fall back to just showing tool calls result
-			}
-
-			// Update the current response for the next iteration
-			currentResponse = followupOut
-
-			// If there are no more tool calls, we're done
-			if len(currentResponse.Choices[0].Message.ToolCalls) == 0 {
-				return currentResponse.Choices[0].Message.Content, nil
-			}
-		}
-
-		// If we've reached the maximum number of iterations, return the last response
-		if currentIteration >= maxIterations {
-			return fmt.Sprintf("Reached maximum number of tool call iterations (%d). Last response: %s",
-				maxIterations, currentResponse.Choices[0].Message.Content), nil
-		}
-
-		// Return the final response after all tool calls are processed
-		return currentResponse.Choices[0].Message.Content, nil
+	// Convert to our unified response format
+	response := InferenceResponse{
+		Content:   out.Choices[0].Message.Content,
+		ToolCalls: []ToolCall{},
 	}
 
-	// Return the regular content response if no tool calls
-	return out.Choices[0].Message.Content, nil
+	// Extract any tool calls
+	for _, toolCall := range out.Choices[0].Message.ToolCalls {
+		toolCallData := ToolCall{
+			ID:    toolCall.ID,
+			Name:  toolCall.Function.Name,
+			Input: toolCall.Function.Arguments,
+		}
+		
+		response.ToolCalls = append(response.ToolCalls, toolCallData)
+	}
+	
+	// If there are tool calls, add them to the conversation history
+	if len(response.ToolCalls) > 0 {
+		blocks := []ContentBlock{}
+		
+		// Only add text block if there's actual content
+		if response.Content != "" {
+			blocks = append(blocks, ContentBlock{
+				Type: "text",
+				Text: response.Content,
+			})
+		}
+		
+		// Add each tool call as a block
+		for _, call := range response.ToolCalls {
+			blocks = append(blocks, ContentBlock{
+				Type:  "tool_use",
+				ID:    call.ID,
+				Name:  call.Name,
+				Input: call.Input,
+			})
+		}
+		
+		// Add to conversation history
+		UpdateConversationHistoryBlocks(blocks, "assistant")
+	} else if response.Content != "" {
+		// If there were no tool calls but we have content, just add it as text
+		UpdateConversationHistoryText(response.Content, "assistant")
+	}
+
+	return response, nil
 }
 
-// UpdateConversationHistory updates the conversation history with a new entry
-func UpdateConversationHistory(content, role string) {
-	conversationHistory = append(conversationHistory, openaiMessage{
-		Content: content,
-		Role:    role,
-	})
+// convertMessagesToOpenAIFormat converts messages with content blocks to OpenAI format
+func convertMessagesToOpenAIFormat(messages []interface{}) []interface{} {
+	result := make([]interface{}, 0, len(messages))
+	
+	for _, msg := range messages {
+		if msgMap, ok := msg.(map[string]interface{}); ok {
+			role, _ := msgMap["role"].(string)
+			content := msgMap["content"]
+			
+			// If it's a regular string content, just keep it as is
+			if _, ok := content.(string); ok {
+				result = append(result, msgMap)
+				continue
+			}
+			
+			// If it's a tool result (from user), convert to OpenAI's format
+			if role == "user" {
+				if blocks, ok := content.([]ContentBlock); ok {
+					for _, block := range blocks {
+						if block.Type == "tool_result" {
+							// Format for OpenAI
+							result = append(result, map[string]interface{}{
+								"role":         "tool", // OpenAI uses "tool" role
+								"tool_call_id": block.ToolUseID,
+								"content":      block.Content,
+							})
+						}
+					}
+				}
+				continue
+			}
+			
+			// If it's an assistant with tool calls
+			if role == "assistant" {
+				if blocks, ok := content.([]ContentBlock); ok {
+					hasToolUse := false
+					
+					// Check if there are any tool_use blocks
+					for _, block := range blocks {
+						if block.Type == "tool_use" {
+							hasToolUse = true
+							break
+						}
+					}
+					
+					if hasToolUse {
+						// Create a formatted message for OpenAI
+						toolCalls := []map[string]interface{}{}
+						var textContent string
+						
+						for _, block := range blocks {
+							if block.Type == "text" {
+								textContent = block.Text
+							} else if block.Type == "tool_use" {
+								toolCalls = append(toolCalls, map[string]interface{}{
+									"id":   block.ID,
+									"type": "function",
+									"function": map[string]interface{}{
+										"name":      block.Name,
+										"arguments": string(block.Input),
+									},
+								})
+							}
+						}
+						
+						result = append(result, map[string]interface{}{
+							"role":       role,
+							"content":    textContent,
+							"tool_calls": toolCalls,
+						})
+						continue
+					}
+				}
+			}
+			
+			// Default - just pass through
+			result = append(result, msgMap)
+		}
+	}
+	
+	return result
+}
+
+// OpenAI struct implements Llm interface
+type OpenAI struct{}
+
+// NewOpenAI creates a new OpenAI provider
+func NewOpenAI() *OpenAI {
+	return &OpenAI{}
+}
+
+// Init initializes the OpenAI provider
+func (o *OpenAI) Init() error {
+	return LoadOpenAIContext()
 }
