@@ -199,14 +199,14 @@ func (o *OpenAI) Inference(model string, messages []interface{}) (InferenceRespo
 			Name:  toolCall.Function.Name,
 			Input: toolCall.Function.Arguments,
 		}
-		
+
 		response.ToolCalls = append(response.ToolCalls, toolCallData)
 	}
-	
+
 	// If there are tool calls, add them to the conversation history
 	if len(response.ToolCalls) > 0 {
 		blocks := []ContentBlock{}
-		
+
 		// Only add text block if there's actual content
 		if response.Content != "" {
 			blocks = append(blocks, ContentBlock{
@@ -214,7 +214,7 @@ func (o *OpenAI) Inference(model string, messages []interface{}) (InferenceRespo
 				Text: response.Content,
 			})
 		}
-		
+
 		// Add each tool call as a block
 		for _, call := range response.ToolCalls {
 			blocks = append(blocks, ContentBlock{
@@ -224,7 +224,7 @@ func (o *OpenAI) Inference(model string, messages []interface{}) (InferenceRespo
 				Input: call.Input,
 			})
 		}
-		
+
 		// Add to conversation history
 		UpdateConversationHistoryBlocks(blocks, "assistant")
 	} else if response.Content != "" {
@@ -238,18 +238,18 @@ func (o *OpenAI) Inference(model string, messages []interface{}) (InferenceRespo
 // convertMessagesToOpenAIFormat converts messages with content blocks to OpenAI format
 func convertMessagesToOpenAIFormat(messages []interface{}) []interface{} {
 	result := make([]interface{}, 0, len(messages))
-	
+
 	for _, msg := range messages {
 		if msgMap, ok := msg.(map[string]interface{}); ok {
 			role, _ := msgMap["role"].(string)
 			content := msgMap["content"]
-			
+
 			// If it's a regular string content, just keep it as is
 			if _, ok := content.(string); ok {
 				result = append(result, msgMap)
 				continue
 			}
-			
+
 			// If it's a tool result (from user), convert to OpenAI's format
 			if role == "user" {
 				if blocks, ok := content.([]ContentBlock); ok {
@@ -266,12 +266,12 @@ func convertMessagesToOpenAIFormat(messages []interface{}) []interface{} {
 				}
 				continue
 			}
-			
+
 			// If it's an assistant with tool calls
 			if role == "assistant" {
 				if blocks, ok := content.([]ContentBlock); ok {
 					hasToolUse := false
-					
+
 					// Check if there are any tool_use blocks
 					for _, block := range blocks {
 						if block.Type == "tool_use" {
@@ -279,12 +279,12 @@ func convertMessagesToOpenAIFormat(messages []interface{}) []interface{} {
 							break
 						}
 					}
-					
+
 					if hasToolUse {
 						// Create a formatted message for OpenAI
 						toolCalls := []map[string]interface{}{}
 						var textContent string
-						
+
 						for _, block := range blocks {
 							if block.Type == "text" {
 								textContent = block.Text
@@ -299,7 +299,7 @@ func convertMessagesToOpenAIFormat(messages []interface{}) []interface{} {
 								})
 							}
 						}
-						
+
 						result = append(result, map[string]interface{}{
 							"role":       role,
 							"content":    textContent,
@@ -309,12 +309,12 @@ func convertMessagesToOpenAIFormat(messages []interface{}) []interface{} {
 					}
 				}
 			}
-			
+
 			// Default - just pass through
 			result = append(result, msgMap)
 		}
 	}
-	
+
 	return result
 }
 

@@ -99,7 +99,7 @@ func AddToolResultToHistory(toolUseID, result string) {
 	if result == "" {
 		result = "No result"
 	}
-	
+
 	toolResult := []ContentBlock{
 		{
 			Type:      "tool_result",

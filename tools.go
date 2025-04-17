@@ -6,10 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
-	"reflect"
 )
 
 // Import the toolCall type from openai.go
@@ -62,23 +62,21 @@ type GrepResult struct {
 // For simple strings, it sets the value to the specified field name
 func parseToolParams[T any](paramsJSON json.RawMessage, simpleStringField string) (T, error) {
 	var params T
-	
+
 	// Clean up the JSON by removing any tab characters that might cause issues
 	cleanJSON := strings.ReplaceAll(string(paramsJSON), "\t", "")
-	
+
 	// 1. Try direct unmarshaling first
 	err := json.Unmarshal([]byte(cleanJSON), &params)
-	
+
 	// 2. If that fails, try to handle string-encoded JSON
 	if err != nil {
 		var strArg string
 		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
 			// We got a string, check if it's JSON
 			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
-				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
 				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
 					// Successfully parsed
-					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
 				} else {
 					// Both approaches failed
 					return params, fmt.Errorf("failed to parse tool parameters: %v (from string: %v)", err, err3)
@@ -86,7 +84,7 @@ func parseToolParams[T any](paramsJSON json.RawMessage, simpleStringField string
 			} else if simpleStringField != "" {
 				// It's a simple string, set it to the specified field
 				fmt.Printf("DEBUG - Treating as simple value for field %s: %s\n", simpleStringField, strArg)
-				
+
 				// Use reflection to set the field
 				v := reflect.ValueOf(&params).Elem()
 				f := v.FieldByName(simpleStringField)
@@ -101,7 +99,7 @@ func parseToolParams[T any](paramsJSON json.RawMessage, simpleStringField string
 			return params, fmt.Errorf("failed to parse tool parameters: %v", err)
 		}
 	}
-	
+
 	return params, nil
 }
 

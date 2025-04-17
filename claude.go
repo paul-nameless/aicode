@@ -221,20 +221,20 @@ func (c *Claude) Inference(model string, messages []interface{}) (InferenceRespo
 	// Extract text and tool calls
 	hasToolUse := false
 	var toolUseBlocks []ContentBlock
-	
+
 	for _, block := range out.Content {
 		if block.Type == "text" {
 			response.Content += block.Text
 		} else if block.Type == "tool_use" {
 			hasToolUse = true
-			
+
 			// Convert to our unified tool call format
 			response.ToolCalls = append(response.ToolCalls, ToolCall{
 				ID:    block.ID,
 				Name:  block.Name,
 				Input: block.Input,
 			})
-			
+
 			// Collect tool use blocks for conversation history
 			toolUseBlocks = append(toolUseBlocks, ContentBlock{
 				Type:  "tool_use",
@@ -244,7 +244,7 @@ func (c *Claude) Inference(model string, messages []interface{}) (InferenceRespo
 			})
 		}
 	}
-	
+
 	// If there were tool calls, add them to conversation history
 	if hasToolUse {
 		// Also add the tool use to our conversation history
@@ -254,10 +254,10 @@ func (c *Claude) Inference(model string, messages []interface{}) (InferenceRespo
 				Text: response.Content,
 			},
 		}
-		
+
 		// Add all tool use blocks
 		responseBlocks = append(responseBlocks, toolUseBlocks...)
-		
+
 		// Update conversation history with the blocks
 		UpdateConversationHistoryBlocks(responseBlocks, "assistant")
 	} else if response.Content != "" {
@@ -304,16 +304,16 @@ func convertToClaudeContent(content interface{}) interface{} {
 				})
 			}
 		}
-		
+
 		// If we ended up with no blocks, just return an empty string
 		// to avoid Claude API errors
 		if len(claudeBlocks) == 0 {
 			return ""
 		}
-		
+
 		return claudeBlocks
 	}
-	
+
 	// Try to handle other formats (arrays of maps, etc.)
 	return content
 }
