@@ -8,6 +8,15 @@ import (
 	"strings"
 )
 
+// formatTokenCount converts token counts to a more readable format
+// For counts >= 1000, it displays as X.Xk (e.g., 1500 → 1.5k)
+func formatTokenCount(count int) string {
+	if count >= 1000 {
+		return fmt.Sprintf("%.1fk", float64(count)/1000)
+	}
+	return fmt.Sprintf("%d", count)
+}
+
 // runSimpleMode processes a single prompt in non-interactive mode
 func runSimpleMode(prompt string, llm Llm) {
 	// Update conversation history with the user prompt
@@ -50,6 +59,14 @@ func runSimpleMode(prompt string, llm Llm) {
 		// Refresh the messages from conversation history
 		history = GetConversationHistory()
 		messages = ConvertToInterfaces(history)
+	}
+	
+	// Print token usage and price if available
+	if claude, ok := llm.(*Claude); ok {
+		price := claude.CalculatePrice()
+		inputDisplay := formatTokenCount(claude.InputTokens)
+		outputDisplay := formatTokenCount(claude.OutputTokens)
+		fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
 	}
 }
 
@@ -116,7 +133,9 @@ func runInteractiveMode(llm Llm) {
 		// Print token usage and price if available
 		if claude, ok := llm.(*Claude); ok {
 			price := claude.CalculatePrice()
-			fmt.Printf("Tokens: %d input, %d output. Cost: $%.2f\n", claude.InputTokens, claude.OutputTokens, price)
+			inputDisplay := formatTokenCount(claude.InputTokens)
+			outputDisplay := formatTokenCount(claude.OutputTokens)
+			fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
 		}
 		fmt.Println(strings.Repeat("━", 64))
 	}
