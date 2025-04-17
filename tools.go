@@ -761,7 +761,6 @@ func isImageFile(filePath string) bool {
 
 // ExecuteEditTool edits a file by replacing old_string with new_string
 func ExecuteEditTool(paramsJSON json.RawMessage) (string, error) {
-	fmt.Printf("DEBUG - Raw edit params received: %s\n", string(paramsJSON))
 
 	// Try multiple approaches to handle potential JSON format issues
 	var params EditToolParams
