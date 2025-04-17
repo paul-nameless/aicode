@@ -253,6 +253,11 @@ type EditToolParams struct {
 	ExpectedReplacements int    `json:"expected_replacements,omitempty"`
 }
 
+type ReplaceToolParams struct {
+	FilePath string `json:"file_path"`
+	Content  string `json:"content"`
+}
+
 type ToolCallResult struct {
 	CallID string
 	Output string
@@ -307,6 +312,11 @@ func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult,
 			result, err = ExecuteEditTool(toolCall.Input)
 			if err != nil {
 				result = fmt.Sprintf("Error executing Edit: %v", err)
+			}
+		case "Replace":
+			result, err = ExecuteReplaceTool(toolCall.Input)
+			if err != nil {
+				result = fmt.Sprintf("Error executing Replace: %v", err)
 			}
 		case "Fetch":
 			result, err = ExecuteFetchTool(toolCall.Input)
@@ -632,6 +642,45 @@ func isImageFile(filePath string) bool {
 		".bmp": true, ".tiff": true, ".webp": true, ".svg": true,
 	}
 	return imageExts[ext]
+}
+
+// ExecuteReplaceTool writes content to a file, overwriting it if it exists
+func ExecuteReplaceTool(paramsJSON json.RawMessage) (string, error) {
+	params, err := parseToolParams[ReplaceToolParams](paramsJSON, "FilePath")
+	if err != nil {
+		return "", fmt.Errorf("failed to parse replace tool parameters: %v", err)
+	}
+
+	// Validate parameters
+	if params.FilePath == "" {
+		return "", fmt.Errorf("file_path parameter is required")
+	}
+	if params.Content == "" {
+		return "", fmt.Errorf("content parameter is required")
+	}
+
+	// Check if file exists to determine if we're creating or overwriting
+	fileExists := true
+	fileInfo, err := os.Stat(params.FilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fileExists = false
+		} else {
+			return "", fmt.Errorf("error accessing file: %v", err)
+		}
+	} else if fileInfo.IsDir() {
+		return "", fmt.Errorf("%s is a directory, not a file", params.FilePath)
+	}
+
+	// Write the content to the file
+	if err := os.WriteFile(params.FilePath, []byte(params.Content), 0644); err != nil {
+		return "", fmt.Errorf("error writing to file: %v", err)
+	}
+
+	if fileExists {
+		return fmt.Sprintf("Successfully overwrote file: %s", params.FilePath), nil
+	}
+	return fmt.Sprintf("Successfully created file: %s", params.FilePath), nil
 }
 
 // ExecuteEditTool edits a file by replacing old_string with new_string
