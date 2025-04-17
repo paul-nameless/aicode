@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"reflect"
 )
 
 // Import the toolCall type from openai.go
@@ -56,19 +57,18 @@ type GrepResult struct {
 	ModTime  time.Time `json:"-"` // Used for sorting, not exported in JSON
 }
 
-// ExecuteGrepTool performs a grep-like search in files using ripgrep (rg)
-func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
-	fmt.Printf("DEBUG - Raw params received: %s\n", string(paramsJSON))
-
+// parseToolParams is a generic function to parse tool parameters from JSON
+// It handles direct JSON, string-encoded JSON, and simple string values
+// For simple strings, it sets the value to the specified field name
+func parseToolParams[T any](paramsJSON json.RawMessage, simpleStringField string) (T, error) {
+	var params T
+	
 	// Clean up the JSON by removing any tab characters that might cause issues
 	cleanJSON := strings.ReplaceAll(string(paramsJSON), "\t", "")
-
-	// Try multiple approaches to handle potential JSON format issues
-
+	
 	// 1. Try direct unmarshaling first
-	var params GrepToolParams
 	err := json.Unmarshal([]byte(cleanJSON), &params)
-
+	
 	// 2. If that fails, try to handle string-encoded JSON
 	if err != nil {
 		var strArg string
@@ -81,17 +81,37 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
 				} else {
 					// Both approaches failed
-					return "", fmt.Errorf("failed to parse grep tool parameters: %v (from string: %v)", err, err3)
+					return params, fmt.Errorf("failed to parse tool parameters: %v (from string: %v)", err, err3)
 				}
-			} else {
-				// It's a simple string, assume it's just the pattern
-				params.Pattern = strArg
-				fmt.Printf("DEBUG - Treating as simple pattern: %s\n", strArg)
+			} else if simpleStringField != "" {
+				// It's a simple string, set it to the specified field
+				fmt.Printf("DEBUG - Treating as simple value for field %s: %s\n", simpleStringField, strArg)
+				
+				// Use reflection to set the field
+				v := reflect.ValueOf(&params).Elem()
+				f := v.FieldByName(simpleStringField)
+				if f.IsValid() && f.CanSet() && f.Kind() == reflect.String {
+					f.SetString(strArg)
+				} else {
+					return params, fmt.Errorf("invalid simple string field: %s", simpleStringField)
+				}
 			}
 		} else {
 			// Both approaches failed
-			return "", fmt.Errorf("failed to parse grep tool parameters: %v", err)
+			return params, fmt.Errorf("failed to parse tool parameters: %v", err)
 		}
+	}
+	
+	return params, nil
+}
+
+// ExecuteGrepTool performs a grep-like search in files using ripgrep (rg)
+func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
+	fmt.Printf("DEBUG - Raw params received: %s\n", string(paramsJSON))
+
+	params, err := parseToolParams[GrepToolParams](paramsJSON, "Pattern")
+	if err != nil {
+		return "", fmt.Errorf("failed to parse grep tool parameters: %v", err)
 	}
 
 	// Validate parameters
@@ -366,33 +386,9 @@ func executeCommand(command string, timeout int) (string, error) {
 func ExecuteFindFilesTool(paramsJSON json.RawMessage) (string, error) {
 	fmt.Printf("DEBUG - Raw glob params received: %s\n", string(paramsJSON))
 
-	// Try multiple approaches to handle potential JSON format issues
-	var params GlobToolParams
-	err := json.Unmarshal(paramsJSON, &params)
-
-	// Try to handle string-encoded JSON if direct unmarshaling fails
+	params, err := parseToolParams[GlobToolParams](paramsJSON, "Pattern")
 	if err != nil {
-		var strArg string
-		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
-			// We got a string, check if it's JSON
-			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
-				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
-				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
-					// Successfully parsed
-					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
-				} else {
-					// Both approaches failed
-					return "", fmt.Errorf("failed to parse glob tool parameters: %v (from string: %v)", err, err3)
-				}
-			} else {
-				// It's a simple string, assume it's just the pattern
-				params.Pattern = strArg
-				fmt.Printf("DEBUG - Treating as simple pattern: %s\n", strArg)
-			}
-		} else {
-			// Both approaches failed
-			return "", fmt.Errorf("failed to parse glob tool parameters: %v", err)
-		}
+		return "", fmt.Errorf("failed to parse glob tool parameters: %v", err)
 	}
 
 	// Validate parameters
@@ -452,33 +448,9 @@ func ExecuteFindFilesTool(paramsJSON json.RawMessage) (string, error) {
 
 // ExecuteLsTool lists files and directories in a given path using the shell ls command
 func ExecuteLsTool(paramsJSON json.RawMessage) (string, error) {
-	// Try multiple approaches to handle potential JSON format issues
-	var params LsToolParams
-	err := json.Unmarshal(paramsJSON, &params)
-
-	// Try to handle string-encoded JSON if direct unmarshaling fails
+	params, err := parseToolParams[LsToolParams](paramsJSON, "Path")
 	if err != nil {
-		var strArg string
-		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
-			// We got a string, check if it's JSON
-			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
-				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
-				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
-					// Successfully parsed
-					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
-				} else {
-					// Both approaches failed
-					return "", fmt.Errorf("failed to parse ls tool parameters: %v (from string: %v)", err, err3)
-				}
-			} else {
-				// It's a simple string, assume it's just the path
-				params.Path = strArg
-				fmt.Printf("DEBUG - Treating as simple path: %s\n", strArg)
-			}
-		} else {
-			// Both approaches failed
-			return "", fmt.Errorf("failed to parse ls tool parameters: %v", err)
-		}
+		return "", fmt.Errorf("failed to parse ls tool parameters: %v", err)
 	}
 
 	// Use current directory if path is not specified
@@ -539,33 +511,9 @@ func ExecuteLsTool(paramsJSON json.RawMessage) (string, error) {
 func ExecuteBashTool(paramsJSON json.RawMessage) (string, error) {
 	fmt.Printf("DEBUG - Raw bash params received: %s\n", string(paramsJSON))
 
-	// Try multiple approaches to handle potential JSON format issues
-	var params BashToolParams
-	err := json.Unmarshal(paramsJSON, &params)
-
-	// Try to handle string-encoded JSON if direct unmarshaling fails
+	params, err := parseToolParams[BashToolParams](paramsJSON, "Command")
 	if err != nil {
-		var strArg string
-		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
-			// We got a string, check if it's JSON
-			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
-				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
-				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
-					// Successfully parsed
-					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
-				} else {
-					// Both approaches failed
-					return "", fmt.Errorf("failed to parse bash tool parameters: %v (from string: %v)", err, err3)
-				}
-			} else {
-				// It's a simple string, assume it's just the command
-				params.Command = strArg
-				fmt.Printf("DEBUG - Treating as simple command: %s\n", strArg)
-			}
-		} else {
-			// Both approaches failed
-			return "", fmt.Errorf("failed to parse bash tool parameters: %v", err)
-		}
+		return "", fmt.Errorf("failed to parse bash tool parameters: %v", err)
 	}
 
 	// Validate parameters
@@ -586,33 +534,9 @@ type ViewToolParams struct {
 
 // ExecuteViewTool reads a file from the filesystem with optional offset and limit
 func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
-	// Try multiple approaches to handle potential JSON format issues
-	var params ViewToolParams
-	err := json.Unmarshal(paramsJSON, &params)
-
-	// Try to handle string-encoded JSON if direct unmarshaling fails
+	params, err := parseToolParams[ViewToolParams](paramsJSON, "FilePath")
 	if err != nil {
-		var strArg string
-		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
-			// We got a string, check if it's JSON
-			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
-				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
-				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
-					// Successfully parsed
-					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
-				} else {
-					// Both approaches failed
-					return "", fmt.Errorf("failed to parse view tool parameters: %v (from string: %v)", err, err3)
-				}
-			} else {
-				// It's a simple string, assume it's just the file path
-				params.FilePath = strArg
-				fmt.Printf("DEBUG - Treating as simple file path: %s\n", strArg)
-			}
-		} else {
-			// Both approaches failed
-			return "", fmt.Errorf("failed to parse view tool parameters: %v", err)
-		}
+		return "", fmt.Errorf("failed to parse view tool parameters: %v", err)
 	}
 
 	// Validate parameters
@@ -683,33 +607,9 @@ func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
 func ExecuteFetchTool(paramsJSON json.RawMessage) (string, error) {
 	fmt.Printf("DEBUG - Raw fetch params received: %s\n", string(paramsJSON))
 
-	// Try multiple approaches to handle potential JSON format issues
-	var params FetchToolParams
-	err := json.Unmarshal(paramsJSON, &params)
-
-	// Try to handle string-encoded JSON if direct unmarshaling fails
+	params, err := parseToolParams[FetchToolParams](paramsJSON, "URL")
 	if err != nil {
-		var strArg string
-		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
-			// We got a string, check if it's JSON
-			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
-				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
-				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
-					// Successfully parsed
-					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
-				} else {
-					// Both approaches failed
-					return "", fmt.Errorf("failed to parse fetch tool parameters: %v (from string: %v)", err, err3)
-				}
-			} else {
-				// It's a simple string, assume it's just the URL
-				params.URL = strArg
-				fmt.Printf("DEBUG - Treating as simple URL: %s\n", strArg)
-			}
-		} else {
-			// Both approaches failed
-			return "", fmt.Errorf("failed to parse fetch tool parameters: %v", err)
-		}
+		return "", fmt.Errorf("failed to parse fetch tool parameters: %v", err)
 	}
 
 	// Validate parameters
@@ -761,33 +661,10 @@ func isImageFile(filePath string) bool {
 
 // ExecuteEditTool edits a file by replacing old_string with new_string
 func ExecuteEditTool(paramsJSON json.RawMessage) (string, error) {
-
-	// Try multiple approaches to handle potential JSON format issues
-	var params EditToolParams
-	err := json.Unmarshal(paramsJSON, &params)
-
-	// Try to handle string-encoded JSON if direct unmarshaling fails
+	// For EditTool, we don't support simple string parameters
+	params, err := parseToolParams[EditToolParams](paramsJSON, "")
 	if err != nil {
-		var strArg string
-		if err2 := json.Unmarshal(paramsJSON, &strArg); err2 == nil {
-			// We got a string, check if it's JSON
-			if strings.HasPrefix(strArg, "{") && strings.HasSuffix(strArg, "}") {
-				fmt.Printf("DEBUG - Found string-encoded JSON: %s\n", strArg)
-				if err3 := json.Unmarshal([]byte(strArg), &params); err3 == nil {
-					// Successfully parsed
-					fmt.Printf("DEBUG - Successfully parsed string-encoded JSON\n")
-				} else {
-					// Both approaches failed
-					return "", fmt.Errorf("failed to parse edit tool parameters: %v (from string: %v)", err, err3)
-				}
-			} else {
-				// It's not a simple string parameter we can handle
-				return "", fmt.Errorf("failed to parse edit tool parameters: %v", err)
-			}
-		} else {
-			// Both approaches failed
-			return "", fmt.Errorf("failed to parse edit tool parameters: %v", err)
-		}
+		return "", fmt.Errorf("failed to parse edit tool parameters: %v", err)
 	}
 
 	// Validate parameters
