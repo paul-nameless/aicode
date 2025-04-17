@@ -21,7 +21,7 @@ type InferenceResponse struct {
 // Llm interface defines methods for LLM providers
 type Llm interface {
 	// Inference sends a prompt to the LLM and returns the unified response
-	Inference(model string, messages []interface{}) (InferenceResponse, error)
+	Inference(messages []interface{}) (InferenceResponse, error)
 	// Init initializes the LLM provider
 	Init() error
 }

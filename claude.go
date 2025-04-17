@@ -132,7 +132,7 @@ func loadClaudeTools() ([]claudeTool, error) {
 }
 
 // Inference implements the Llm interface for Claude
-func (c *Claude) Inference(model string, messages []interface{}) (InferenceResponse, error) {
+func (c *Claude) Inference(messages []interface{}) (InferenceResponse, error) {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
 		return InferenceResponse{}, errors.New("ANTHROPIC_API_KEY environment variable not set")
@@ -172,7 +172,7 @@ func (c *Claude) Inference(model string, messages []interface{}) (InferenceRespo
 	// Start a conversation
 	url := baseURL + "/v1/messages"
 	reqBody := claudeRequest{
-		Model:     model,
+		Model:     c.Model,
 		Messages:  claudeMessages,
 		System:    systemContent,
 		Tools:     claudeTools,
@@ -352,11 +352,17 @@ func (c *Claude) executeTool(toolName string, toolInput json.RawMessage) (string
 }
 
 // Claude struct implements Llm interface
-type Claude struct{}
+type Claude struct {
+	Model string
+}
 
 // NewClaude creates a new Claude provider
 func NewClaude() *Claude {
-	return &Claude{}
+	model := os.Getenv("ANTHROPIC_MODEL")
+	if model == "" {
+		model = "claude-3-opus-20240229"
+	}
+	return &Claude{Model: model}
 }
 
 // Init initializes the Claude provider

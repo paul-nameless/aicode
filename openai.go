@@ -132,7 +132,7 @@ type ToolResultMessage struct {
 }
 
 // Inference implements the Llm interface for OpenAI
-func (o *OpenAI) Inference(model string, messages []interface{}) (InferenceResponse, error) {
+func (o *OpenAI) Inference(messages []interface{}) (InferenceResponse, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return InferenceResponse{}, errors.New("OPENAI_API_KEY environment variable not set")
@@ -149,7 +149,7 @@ func (o *OpenAI) Inference(model string, messages []interface{}) (InferenceRespo
 
 	url := baseURL + "/v1/chat/completions"
 	reqBody := openaiRequest{
-		Model:    model,
+		Model:    o.Model,
 		Messages: convertedMessages,
 		Tools:    tools,
 	}
@@ -319,11 +319,17 @@ func convertMessagesToOpenAIFormat(messages []interface{}) []interface{} {
 }
 
 // OpenAI struct implements Llm interface
-type OpenAI struct{}
+type OpenAI struct {
+	Model string
+}
 
 // NewOpenAI creates a new OpenAI provider
 func NewOpenAI() *OpenAI {
-	return &OpenAI{}
+	model := os.Getenv("OPENAI_MODEL")
+	if model == "" {
+		model = "gpt-4.1-nano"
+	}
+	return &OpenAI{Model: model}
 }
 
 // Init initializes the OpenAI provider

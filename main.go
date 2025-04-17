@@ -18,9 +18,6 @@ func runSimpleMode(prompt string, llm Llm) {
 	// Update conversation history with the user prompt
 	UpdateConversationHistoryText(prompt, "user")
 
-	// Get model from environment variable or use default based on provider
-	model := getModelForProvider(llm)
-
 	// Convert conversation history to interfaces
 	history := GetConversationHistory()
 	messages := ConvertToInterfaces(history)
@@ -28,7 +25,7 @@ func runSimpleMode(prompt string, llm Llm) {
 	// Process the initial request and any tool calls
 	for {
 		// Get response from LLM
-		inferenceResponse, err := llm.Inference(model, messages)
+		inferenceResponse, err := llm.Inference(messages)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -64,8 +61,6 @@ func runSimpleMode(prompt string, llm Llm) {
 // runInteractiveMode reads user input in a loop until Ctrl+C/D
 func runInteractiveMode(llm Llm) {
 	// Get model from environment variable or use default based on provider
-	model := getModelForProvider(llm)
-
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Print("> ")
@@ -89,7 +84,7 @@ func runInteractiveMode(llm Llm) {
 		// Process the initial request and any tool calls
 		for {
 			// Get response from LLM
-			inferenceResponse, err := llm.Inference(model, messages)
+			inferenceResponse, err := llm.Inference(messages)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				break
@@ -127,26 +122,6 @@ func runInteractiveMode(llm Llm) {
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
 		os.Exit(1)
-	}
-}
-
-// getModelForProvider returns the appropriate model name based on the LLM provider
-func getModelForProvider(llm Llm) string {
-	switch llm.(type) {
-	case *Claude:
-		model := os.Getenv("ANTHROPIC_MODEL")
-		if model == "" {
-			model = defaultClaudeModel
-		}
-		return model
-	case *OpenAI:
-		model := os.Getenv("OPENAI_MODEL")
-		if model == "" {
-			model = defaultOpenAIModel
-		}
-		return model
-	default:
-		return defaultOpenAIModel
 	}
 }
 
