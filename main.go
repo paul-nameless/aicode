@@ -8,11 +8,6 @@ import (
 	"strings"
 )
 
-const (
-	defaultOpenAIModel = "gpt-4.1-nano"
-	defaultClaudeModel = "claude-3-haiku-20240307"
-)
-
 // runSimpleMode processes a single prompt in non-interactive mode
 func runSimpleMode(prompt string, llm Llm) {
 	// Update conversation history with the user prompt
