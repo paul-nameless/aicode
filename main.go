@@ -98,8 +98,10 @@ func runInteractiveMode(llm Llm) {
 			// Check if we have tool calls
 			if len(inferenceResponse.ToolCalls) == 0 {
 				// No tool calls, print the response and continue the outer loop
-				fmt.Println("< " + inferenceResponse.Content)
-				UpdateConversationHistoryText(inferenceResponse.Content, "assistant")
+				if inferenceResponse.Content != "" {
+					fmt.Println("< " + inferenceResponse.Content)
+					UpdateConversationHistoryText(inferenceResponse.Content, "assistant")
+				}
 				break
 			}
 

@@ -55,7 +55,7 @@ const (
     "properties": {
       "file_path": {
         "type": "string",
-        "description": "The absolute path to the file to read"
+        "description": "The relative path to the file to read"
       },
       "offset": {
         "type": "number",
@@ -78,7 +78,7 @@ const (
     "properties": {
       "file_path": {
         "type": "string",
-        "description": "The absolute path to the file to write (must be absolute, not relative)"
+        "description": "The relative path to the file to write (must be elative)"
       },
       "content": {
         "type": "string",
@@ -97,7 +97,7 @@ const (
     "properties": {
       "file_path": {
         "type": "string",
-        "description": "The absolute path to the file to modify"
+        "description": "The relative path to the file to modify"
       },
       "old_string": {
         "type": "string",
@@ -141,14 +141,14 @@ const (
 
 	LSToolSchema = `{
   "name": "LS",
-  "description": "Lists files and directories in a given path. The path parameter must be an absolute path, not a relative path.",
+  "description": "Lists files and directories in a given path. The path parameter must be a relative path, not a relative path.",
   "parameters": {
     "type": "object",
     "required": ["path"],
     "properties": {
       "path": {
         "type": "string",
-        "description": "The absolute path to the directory to list (must be absolute, not relative), by default should be current path"
+        "description": "The relative path to the directory to list (must be relative), by default should be current path"
       },
       "ignore": {
         "type": "array",

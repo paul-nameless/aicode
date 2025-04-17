@@ -10,7 +10,7 @@ Before using this tool:
    - Use the LS tool to verify the parent directory exists and is the correct location
 
 To make a file edit, provide the following:
-1. file_path: The absolute path to the file to modify (must be absolute, not relative)
+1. file_path: The relative path to the file to modify (must relative)
 2. old_string: The text to replace (must match the file contents exactly, including all whitespace and indentation)
 3. new_string: The edited text to replace the old_string
 4. expected_replacements: The number of replacements you expect to make. Defaults to 1 if not specified.
@@ -45,7 +45,7 @@ WARNING: If you do not follow these requirements:
 When making edits:
    - Ensure the edit results in idiomatic, correct code
    - Do not leave the code in a broken state
-   - Always use absolute file paths (starting with /)
+   - Always use relative file paths
 
 If you want to create a new file, use:
    - A new file path, including dir name if needed
