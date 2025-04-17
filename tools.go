@@ -329,7 +329,9 @@ func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult,
 			Output: result,
 		})
 
-		toolResponse.WriteString(fmt.Sprintf("\n    ->%s\n", result))
+		if result != "" {
+			toolResponse.WriteString(fmt.Sprintf("\n    ->%s\n", result))
+		}
 	}
 
 	// Print the results to stdout for debugging
