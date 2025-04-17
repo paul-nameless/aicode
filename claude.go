@@ -212,6 +212,10 @@ func (c *Claude) Inference(messages []interface{}) (InferenceResponse, error) {
 	if out.Error != nil {
 		return InferenceResponse{}, errors.New(out.Error.Message)
 	}
+	
+	// Accumulate token usage
+	c.InputTokens += out.Usage.InputTokens
+	c.OutputTokens += out.Usage.OutputTokens
 
 	// Process the response into our unified format
 	response := InferenceResponse{
@@ -353,7 +357,9 @@ func (c *Claude) executeTool(toolName string, toolInput json.RawMessage) (string
 
 // Claude struct implements Llm interface
 type Claude struct {
-	Model string
+	Model        string
+	InputTokens  int // Track total input tokens used
+	OutputTokens int // Track total output tokens used
 }
 
 // NewClaude creates a new Claude provider
@@ -362,7 +368,11 @@ func NewClaude() *Claude {
 	if model == "" {
 		model = "claude-3-opus-20240229"
 	}
-	return &Claude{Model: model}
+	return &Claude{
+		Model:        model,
+		InputTokens:  0,
+		OutputTokens: 0,
+	}
 }
 
 // Init initializes the Claude provider

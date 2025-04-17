@@ -26,6 +26,11 @@ func runSimpleMode(prompt string, llm Llm) {
 			os.Exit(1)
 		}
 
+		// Print token usage if available
+		if claude, ok := llm.(*Claude); ok {
+			fmt.Printf("Tokens used: %d input, %d output\n", claude.InputTokens, claude.OutputTokens)
+		}
+
 		// Check if we have tool calls
 		if len(inferenceResponse.ToolCalls) == 0 {
 			// No tool calls, print the response and exit
@@ -112,6 +117,12 @@ func runInteractiveMode(llm Llm) {
 			history = GetConversationHistory()
 			messages = ConvertToInterfaces(history)
 		}
+
+		// Print token usage if available
+		if claude, ok := llm.(*Claude); ok {
+			fmt.Printf("Tokens used: %d input, %d output\n", claude.InputTokens, claude.OutputTokens)
+		}
+		fmt.Println(strings.Repeat("━", 64))
 	}
 
 	if err := scanner.Err(); err != nil {
