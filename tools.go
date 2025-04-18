@@ -561,25 +561,12 @@ func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
 	}
 
 	// Execute the command
-	result, err := executeCommand(cmd, 0)
+	_, err = executeCommand(cmd, 0)
 	if err != nil {
 		return "", fmt.Errorf("error reading file: %v", err)
 	}
 
-	// Format the output
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("File: %s\n", params.FilePath))
-
-	if params.Offset > 0 {
-		sb.WriteString(fmt.Sprintf("Lines %d to %d:\n\n",
-			params.Offset, params.Offset+min(params.Limit, countLines(result))-1))
-	} else {
-		// sb.WriteString(fmt.Sprintf("First %d lines:\n\n", min(params.Limit, countLines(result))))
-	}
-
-	sb.WriteString(result)
-
-	return sb.String(), nil
+	return "", nil
 }
 
 // ExecuteFetchTool fetches content from a URL using curl
