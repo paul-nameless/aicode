@@ -133,10 +133,6 @@ func loadClaudeTools() ([]claudeTool, error) {
 
 // Inference implements the Llm interface for Claude
 func (c *Claude) Inference(messages []interface{}) (InferenceResponse, error) {
-	apiKey := os.Getenv("ANTHROPIC_API_KEY")
-	if apiKey == "" {
-		return InferenceResponse{}, errors.New("ANTHROPIC_API_KEY environment variable not set")
-	}
 
 	// Convert messages to Claude format
 	var claudeMessages []claudeMessage
@@ -187,7 +183,7 @@ func (c *Claude) Inference(messages []interface{}) (InferenceResponse, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("x-api-key", c.apiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -362,6 +358,8 @@ type Claude struct {
 	OutputTokens          int     // Track total output tokens used
 	InputPricePerMillion  float64 // Price per million input tokens
 	OutputPricePerMillion float64 // Price per million output tokens
+	Config                Config  // Configuration
+	apiKey                string  // API key for Claude API
 }
 
 // CalculatePrice calculates the price for Claude API usage
@@ -372,12 +370,18 @@ func (c *Claude) CalculatePrice() float64 {
 }
 
 // NewClaude creates a new Claude provider
-func NewClaude() *Claude {
-	model := os.Getenv("ANTHROPIC_MODEL")
+func NewClaude(config Config) *Claude {
+	model := config.Model
 	if model == "" {
-		model = "claude-3-opus-20240229"
+		model = os.Getenv("MODEL")
 	}
+	apiKey := config.ApiKey
+	if apiKey == "" {
+		apiKey = os.Getenv("ANTHROPIC_API_KEY")
+	}
+
 	return &Claude{
+		apiKey:                apiKey,
 		Model:                 model,
 		InputTokens:           0,
 		OutputTokens:          0,
@@ -386,7 +390,7 @@ func NewClaude() *Claude {
 	}
 }
 
-// Init initializes the Claude provider
-func (c *Claude) Init() error {
+// Init initializes the Claude provider with given configuration
+func (c *Claude) Init(config Config) error {
 	return LoadClaudeContext()
 }

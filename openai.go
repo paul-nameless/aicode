@@ -324,7 +324,8 @@ func convertMessagesToOpenAIFormat(messages []interface{}) []interface{} {
 
 // OpenAI struct implements Llm interface
 type OpenAI struct {
-	Model string
+	Model  string
+	Config Config // Configuration
 }
 
 // NewOpenAI creates a new OpenAI provider
@@ -336,7 +337,14 @@ func NewOpenAI() *OpenAI {
 	return &OpenAI{Model: model}
 }
 
-// Init initializes the OpenAI provider
-func (o *OpenAI) Init() error {
+// Init initializes the OpenAI provider with given configuration
+func (o *OpenAI) Init(config Config) error {
+	o.Config = config
+
+	// Override model from config if provided
+	if config.Model != "" {
+		o.Model = config.Model
+	}
+
 	return LoadOpenAIContext()
 }

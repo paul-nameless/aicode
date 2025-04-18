@@ -60,7 +60,7 @@ func runSimpleMode(prompt string, llm Llm) {
 		history = GetConversationHistory()
 		messages = ConvertToInterfaces(history)
 	}
-	
+
 	// Print token usage and price if available
 	if claude, ok := llm.(*Claude); ok {
 		price := claude.CalculatePrice()
@@ -146,19 +146,25 @@ func runInteractiveMode(llm Llm) {
 	}
 }
 
-// initLLM initializes the appropriate LLM provider based on available API keys
-func initLLM() (Llm, error) {
+// initLLM initializes the appropriate LLM provider based on configuration
+func initLLM(configPath string) (Llm, error) {
 	var llm Llm
 
-	// Choose provider based on available API keys
-	if os.Getenv("ANTHROPIC_API_KEY") != "" {
-		llm = NewClaude()
+	// Load configuration
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load configuration: %v", err)
+	}
+
+	// Choose provider based on configuration or available API keys
+	if config.Provider == "claude" || os.Getenv("ANTHROPIC_API_KEY") != "" {
+		llm = NewClaude(config)
 	} else {
 		llm = NewOpenAI()
 	}
 
-	// Initialize the provider
-	if err := llm.Init(); err != nil {
+	// Initialize the provider with configuration
+	if err := llm.Init(config); err != nil {
 		return nil, err
 	}
 
@@ -168,6 +174,7 @@ func initLLM() (Llm, error) {
 func main() {
 	// Parse command line flags
 	quietFlag := flag.Bool("q", false, "Run in simple mode with a single prompt")
+	configFlag := flag.String("p", "config.yml", "Profile/config file")
 	flag.Parse()
 
 	// Initialize context and load system prompts
@@ -175,8 +182,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize context: %v\n", err)
 	}
 
-	// Initialize LLM provider
-	llm, err := initLLM()
+	// Initialize LLM provider with configuration
+	llm, err := initLLM(*configFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize LLM provider: %v\n", err)
 		os.Exit(1)
