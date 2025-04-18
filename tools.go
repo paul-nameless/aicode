@@ -330,7 +330,7 @@ func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult,
 		})
 
 		if result != "" {
-			toolResponse.WriteString(fmt.Sprintf("\n    ->%s\n", result))
+			toolResponse.WriteString(fmt.Sprintf("%s\n", result))
 		}
 	}
 

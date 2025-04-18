@@ -39,7 +39,7 @@ func runSimpleMode(prompt string, llm Llm) {
 		if len(inferenceResponse.ToolCalls) == 0 {
 			// No tool calls, print the response and exit
 			fmt.Println(inferenceResponse.Content)
-			UpdateConversationHistoryText(inferenceResponse.Content, "assistant")
+			// The assistant message is already added to history in the Inference method
 			break
 		}
 
@@ -107,7 +107,7 @@ func runInteractiveMode(llm Llm) {
 				// No tool calls, print the response and continue the outer loop
 				if inferenceResponse.Content != "" {
 					fmt.Println("< " + inferenceResponse.Content)
-					UpdateConversationHistoryText(inferenceResponse.Content, "assistant")
+					// The assistant message is already added to history in the Inference method
 				}
 				break
 			}
