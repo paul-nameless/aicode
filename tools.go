@@ -453,7 +453,7 @@ func ExecuteLsTool(paramsJSON json.RawMessage) (string, error) {
 	}
 
 	// Build the ls command with options
-	lsCmd := fmt.Sprintf("ls -la '%s'", strings.ReplaceAll(params.Path, "'", "'\\''"))
+	lsCmd := fmt.Sprintf("ls -a '%s'", strings.ReplaceAll(params.Path, "'", "'\\''"))
 
 	// Add ignore patterns if specified
 	if len(params.Ignore) > 0 {
