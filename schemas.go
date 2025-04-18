@@ -140,7 +140,7 @@ const (
 }`
 
 	LsToolSchema = `{
-  "name": "LS",
+  "name": "Ls",
   "description": "Lists files and directories in a given path. The path parameter must be a relative path, not a relative path.",
   "parameters": {
     "type": "object",
@@ -182,7 +182,7 @@ const (
 
 	DispatchAgentSchema = `{
   "name": "dispatch_agent",
-  "description": "Launch a new agent that has access to the following tools: View, GlobTool, GrepTool, LS.",
+  "description": "Launch a new agent that has access to the following tools: View, GlobTool, GrepTool, Ls.",
   "parameters": {
     "type": "object",
     "required": ["prompt"],
