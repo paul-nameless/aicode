@@ -89,7 +89,7 @@ func loadClaudeTools() ([]claudeTool, error) {
 		"Replace":        {ReplaceToolSchema, ReplaceToolDescription},
 		"Edit":           {EditToolSchema, EditToolDescription},
 		"Bash":           {BashToolSchema, BashToolDescription},
-		"LS":             {LSToolSchema, LSToolDescription},
+		"Ls":             {LsToolSchema, LsToolDescription},
 		"FindFilesTool":  {FindFilesToolSchema, FindFilesToolDescription},
 		"dispatch_agent": {DispatchAgentSchema, DispatchAgentDescription},
 		"Fetch":          {FetchToolSchema, FetchToolDescription},
@@ -336,7 +336,7 @@ func (c *Claude) executeTool(toolName string, toolInput json.RawMessage) (string
 		result, err = ExecuteFindFilesTool(toolInput)
 	case "Bash":
 		result, err = ExecuteBashTool(toolInput)
-	case "LS":
+	case "Ls":
 		result, err = ExecuteLsTool(toolInput)
 	case "View":
 		result, err = ExecuteViewTool(toolInput)

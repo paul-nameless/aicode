@@ -56,7 +56,7 @@ func loadOpenAITools() ([]openaiTool, error) {
 		"Replace":        {ReplaceToolSchema, ReplaceToolDescription},
 		"Edit":           {EditToolSchema, EditToolDescription},
 		"Bash":           {BashToolSchema, BashToolDescription},
-		"LS":             {LSToolSchema, LSToolDescription},
+		"Ls":             {LsToolSchema, LsToolDescription},
 		"FindFilesTool":  {FindFilesToolSchema, FindFilesToolDescription},
 		"dispatch_agent": {DispatchAgentSchema, DispatchAgentDescription},
 		"Fetch":          {FetchToolSchema, FetchToolDescription},

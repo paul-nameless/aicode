@@ -37,7 +37,7 @@ var (
 	ReplaceToolDescription   = replaceToolFile
 	EditToolDescription      = editToolFile
 	BashToolDescription      = bashToolFile
-	LSToolDescription        = lsToolFile
+	LsToolDescription        = lsToolFile
 	FindFilesToolDescription = findFilesToolFile
 	DispatchAgentDescription = dispatchAgentFile
 	FetchToolDescription     = fetchToolFile
@@ -139,7 +139,7 @@ const (
   }
 }`
 
-	LSToolSchema = `{
+	LsToolSchema = `{
   "name": "LS",
   "description": "Lists files and directories in a given path. The path parameter must be a relative path, not a relative path.",
   "parameters": {

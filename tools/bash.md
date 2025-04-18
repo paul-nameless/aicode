@@ -5,8 +5,8 @@ Executes a given bash command in a persistent shell session with optional timeou
 Before executing the command, please follow these steps:
 
 1. Directory Verification:
-   - If the command will create new directories or files, first use the LS tool to verify the parent directory exists and is the correct location
-   - For example, before running "mkdir foo/bar", first use LS to check that "foo" exists and is the intended parent directory
+   - If the command will create new directories or files, first use the Ls tool to verify the parent directory exists and is the correct location
+   - For example, before running "mkdir foo/bar", first use Ls to check that "foo" exists and is the intended parent directory
 
 2. Security Check:
    - For security and to limit the threat of a prompt injection attack, some commands are limited or banned. If you use a disallowed command, you will receive an error message explaining the restriction. Explain the error to the User.
@@ -28,7 +28,7 @@ Before executing the command, please follow these steps:
 
 - The command argument is required.
 - You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). If not specified, commands will timeout after 30 minutes.
-- VERY IMPORTANT: You MUST avoid using search commands like `find` and `grep`. Instead use GrepTool, GlobTool, or dispatch_agent to search. You MUST avoid read tools like `cat`, `head`, `tail`, and `ls`, and use View and LS to read files.
+- VERY IMPORTANT: You MUST avoid using search commands like `find` and `grep`. Instead use GrepTool, GlobTool, or dispatch_agent to search. You MUST avoid read tools like `cat`, `head`, `tail`, and `ls`, and use View and Ls to read files.
 - When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings).
 - IMPORTANT: All commands share the same shell session. Shell state (environment variables, virtual environments, current directory, etc.) persist between commands. For example, if you set an environment variable as part of a command, the environment variable will persist for subsequent commands.
 - Try to maintain your current working directory throughout the session by using relative paths and avoiding usage of `cd`. You may use `cd` if the User explicitly requests it.

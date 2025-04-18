@@ -7,7 +7,7 @@ Before using this tool:
 1. Use the View tool to understand the file's contents and context
 
 2. Verify the directory path is correct (only applicable when creating new files):
-   - Use the LS tool to verify the parent directory exists and is the correct location
+   - Use the Ls tool to verify the parent directory exists and is the correct location
 
 To make a file edit, provide the following:
 1. file_path: The relative path to the file to modify (must relative)

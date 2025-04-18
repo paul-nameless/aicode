@@ -293,10 +293,10 @@ func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult,
 			if err != nil {
 				result = fmt.Sprintf("Error executing Bash: %v", err)
 			}
-		case "LS":
+		case "Ls":
 			result, err = ExecuteLsTool(toolCall.Input)
 			if err != nil {
-				result = fmt.Sprintf("Error executing LS: %v", err)
+				result = fmt.Sprintf("Error executing Ls: %v", err)
 			}
 		case "View":
 			result, err = ExecuteViewTool(toolCall.Input)
@@ -561,12 +561,12 @@ func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
 	}
 
 	// Execute the command
-	_, err = executeCommand(cmd, 0)
+	result, err := executeCommand(cmd, 0)
 	if err != nil {
 		return "", fmt.Errorf("error reading file: %v", err)
 	}
 
-	return "", nil
+	return result, nil
 }
 
 // ExecuteFetchTool fetches content from a URL using curl
