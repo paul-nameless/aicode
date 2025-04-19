@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
 )
 
@@ -171,11 +173,26 @@ func initLLM(configPath string) (Llm, error) {
 	return llm, nil
 }
 
+func expandHomeDir(path string) string {
+	if !strings.HasPrefix(path, "~") {
+		return path
+	}
+
+	usr, err := user.Current()
+	if err != nil {
+		return path // Return original path if we can't get user home
+	}
+
+	return filepath.Join(usr.HomeDir, path[1:])
+}
+
 func main() {
 	// Parse command line flags
 	quietFlag := flag.Bool("q", false, "Run in simple mode with a single prompt")
-	configFlag := flag.String("p", "config.yml", "Profile/config file")
+	configFlag := flag.String("p", "~/.config/aicode/config.yml", "Profile/config file")
 	flag.Parse()
+
+	configPath := expandHomeDir(*configFlag)
 
 	// Initialize context and load system prompts
 	if err := InitContext(); err != nil {
@@ -183,7 +200,7 @@ func main() {
 	}
 
 	// Initialize LLM provider with configuration
-	llm, err := initLLM(*configFlag)
+	llm, err := initLLM(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize LLM provider: %v\n", err)
 		os.Exit(1)

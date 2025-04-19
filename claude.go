@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 )
 
 // Global variables for Claude
@@ -64,7 +65,7 @@ type claudeResponse struct {
 	} `json:"error,omitempty"`
 }
 
-// LoadClaudeContext loads tools for Claude
+// LoadClaudeContext loads tools and prompts for Claude
 func LoadClaudeContext() error {
 	// Load tools
 	var err error
@@ -133,6 +134,32 @@ func loadClaudeTools() ([]claudeTool, error) {
 
 // Inference implements the Llm interface for Claude
 func (c *Claude) Inference(messages []interface{}) (InferenceResponse, error) {
+	// Try inference with potential retry for rate limiting
+	return c.inferenceWithRetry(messages, false)
+}
+
+// inferenceWithRetry handles the actual inference with optional retry for rate limiting
+func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (InferenceResponse, error) {
+	// Check if we need to summarize the conversation
+	if c.shouldSummarizeConversation() || isRetry {
+		fmt.Println("Context usage approaching limit. Summarizing conversation...")
+		beforeCount := len(conversationHistory)
+		beforeTokens := c.InputTokens
+
+		err := c.summarizeConversation(messages)
+		if err != nil {
+			fmt.Printf("Warning: Failed to summarize conversation: %v\n", err)
+		} else {
+			afterCount := len(conversationHistory)
+			afterTokens := c.InputTokens
+			reductionPercent := 100 - (float64(afterTokens) * 100 / float64(beforeTokens))
+			fmt.Printf("Conversation summarized: %d messages → %d messages (%.1f%% token reduction)\n",
+				beforeCount, afterCount, reductionPercent)
+		}
+
+		// Rebuild messages from updated conversation history
+		messages = ConvertToInterfaces(conversationHistory)
+	}
 
 	// Convert messages to Claude format
 	var claudeMessages []claudeMessage
@@ -191,6 +218,13 @@ func (c *Claude) Inference(messages []interface{}) (InferenceResponse, error) {
 		return InferenceResponse{}, err
 	}
 	defer resp.Body.Close()
+	
+	// Check for rate limit error (HTTP 429)
+	if resp.StatusCode == 429 && !isRetry {
+		fmt.Println("Received rate limit (429) error. Summarizing conversation and retrying...")
+		return c.inferenceWithRetry(messages, true)
+	}
+	
 	body, _ := io.ReadAll(resp.Body)
 
 	// For debugging
@@ -206,6 +240,12 @@ func (c *Claude) Inference(messages []interface{}) (InferenceResponse, error) {
 	}
 
 	if out.Error != nil {
+		// Check if the error is about rate limiting and we haven't retried yet
+		if (strings.Contains(strings.ToLower(out.Error.Message), "rate limit") || 
+		    strings.Contains(strings.ToLower(out.Error.Message), "too many requests")) && !isRetry {
+			fmt.Println("Received rate limit error in response. Summarizing conversation and retrying...")
+			return c.inferenceWithRetry(messages, true)
+		}
 		return InferenceResponse{}, errors.New(out.Error.Message)
 	}
 
@@ -363,6 +403,174 @@ type Claude struct {
 	ContextWindowSize     int     // Maximum context window size in tokens
 }
 
+// shouldSummarizeConversation checks if the conversation needs to be summarized
+// based on the actual token usage compared to the context window size
+func (c *Claude) shouldSummarizeConversation() bool {
+	// Use the actual token count from previous API calls
+	usedTokens := c.InputTokens
+
+	// Check if we're using more than 80% of the context window
+	contextThreshold := int(float64(c.ContextWindowSize) * 0.8)
+	return usedTokens > contextThreshold
+}
+
+// countWords counts the number of words in a string
+func countWords(s string) int {
+	if s == "" {
+		return 0
+	}
+
+	// Simple word count by splitting on whitespace
+	words := 0
+	inWord := false
+
+	for _, r := range s {
+		if r == ' ' || r == '\n' || r == '\t' || r == '\r' {
+			inWord = false
+		} else if !inWord {
+			words++
+			inWord = true
+		}
+	}
+
+	return words
+}
+
+// summarizeConversation creates a summary of the conversation history
+// and replaces the history with the summary, while preserving the last user message
+func (c *Claude) summarizeConversation(messages []interface{}) error {
+	if len(conversationHistory) <= 2 {
+		// Not enough conversation to summarize
+		return nil
+	}
+
+	lastMessages := conversationHistory[len(conversationHistory)-2:]
+
+	// Convert messages to Claude format for the summarization request
+	var claudeMessages []claudeMessage
+	var systemContent string
+
+	for _, msg := range messages {
+		if msgMap, ok := msg.(map[string]interface{}); ok {
+			role, _ := msgMap["role"].(string)
+			content := msgMap["content"]
+
+			if role == "system" {
+				// For system messages, we just append to systemContent
+				if contentStr, ok := content.(string); ok {
+					systemContent += contentStr + "\n\n"
+				}
+			} else {
+				// For user and assistant messages, we need to handle different formats
+				msgContent := convertToClaudeContent(content)
+				claudeMessages = append(claudeMessages, claudeMessage{
+					Role:    role,
+					Content: msgContent,
+				})
+			}
+		}
+	}
+
+	// Prepare a special message asking for the summary
+	// This makes it clearer to the model what we want
+	claudeMessages = append(claudeMessages, claudeMessage{
+		Role:    "user",
+		Content: "Please summarize our conversation so far following the instructions in the system prompt.",
+	})
+
+	// Create a request to summarize the conversation
+	url := "https://api.anthropic.com/v1/messages"
+	reqBody := claudeRequest{
+		Model:       c.Model,
+		Messages:    claudeMessages,
+		System:      summaryPrompt,
+		MaxTokens:   4096,
+		Temperature: 0.2, // Lower temperature for more consistent summaries
+	}
+
+	// Create request
+	bodyBytes, _ := json.Marshal(&reqBody)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", c.apiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	var out claudeResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return fmt.Errorf("error unmarshaling response: %v", err)
+	}
+
+	if out.Error != nil {
+		return errors.New(out.Error.Message)
+	}
+
+	// Extract the summary text
+	var summaryText string
+	for _, block := range out.Content {
+		if block.Type == "text" {
+			summaryText += block.Text
+		}
+	}
+
+	// First attempt: Try to extract structured summary if it exists
+	if strings.Contains(summaryText, "<summary>") && strings.Contains(summaryText, "</summary>") {
+		startIndex := strings.Index(summaryText, "<summary>") + len("<summary>")
+		endIndex := strings.Index(summaryText, "</summary>")
+		if startIndex > 0 && endIndex > startIndex {
+			summaryText = summaryText[startIndex:endIndex]
+		}
+	} else if strings.Contains(summaryText, "CONVERSATION SUMMARY:") && strings.Contains(summaryText, "END OF SUMMARY") {
+		// Second attempt: Try to extract summary using alternative format
+		startIndex := strings.Index(summaryText, "CONVERSATION SUMMARY:") + len("CONVERSATION SUMMARY:")
+		endIndex := strings.Index(summaryText, "END OF SUMMARY")
+		if startIndex > 0 && endIndex > startIndex {
+			summaryText = summaryText[startIndex:endIndex]
+		}
+	}
+
+	// Clean up any extra whitespace and ensure the summary is not empty
+	summaryText = strings.TrimSpace(summaryText)
+
+	// If we still don't have a summary, use the whole response as a fallback
+	if summaryText == "" {
+		summaryText = "Summary of conversation: " + out.Content[0].Text
+		summaryText = strings.TrimSpace(summaryText)
+	}
+
+	if summaryText == "" {
+		return errors.New("received empty summary")
+	}
+
+	// Replace conversation history with the summary as an assistant message
+	conversationHistory = []Message{
+		{
+			Role:    "assistant",
+			Content: summaryText,
+		},
+	}
+
+	if len(lastMessages) != 0 {
+		conversationHistory = append(conversationHistory, lastMessages...)
+	}
+
+	// Reset the token counter since we've summarized the conversation
+	c.InputTokens = 0
+	c.OutputTokens = 0
+
+	return nil
+}
+
 // CalculatePrice calculates the price for Claude API usage
 func (c *Claude) CalculatePrice() float64 {
 	inputPrice := float64(c.InputTokens) * c.InputPricePerMillion / 1000000.0
@@ -374,7 +582,7 @@ func (c *Claude) CalculatePrice() float64 {
 func NewClaude(config Config) *Claude {
 	model := config.Model
 	if model == "" {
-		model = os.Getenv("MODEL")
+		model = os.Getenv("ANTHROPIC_MODEL")
 	}
 	apiKey := config.ApiKey
 	if apiKey == "" {
@@ -388,7 +596,8 @@ func NewClaude(config Config) *Claude {
 		OutputTokens:          0,
 		InputPricePerMillion:  3.0,  // $3 per million input tokens
 		OutputPricePerMillion: 15.0, // $15 per million output tokens
-		ContextWindowSize:     200_000,
+		// ContextWindowSize:     200_000,
+		ContextWindowSize: 80_000,
 	}
 }
 

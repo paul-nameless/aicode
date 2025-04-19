@@ -54,17 +54,17 @@ func InitContext() error {
 	conversationHistory = []Message{}
 
 	// Add system prompts
-	UpdateConversationHistoryText(defaultSystemPrompt, "system")
+	// UpdateConversationHistoryText(defaultSystemPrompt, "system")
 
 	// Check for AI.md file
 	if aiContent, err := os.ReadFile("AI.md"); err == nil {
 		// Add AI.md content as system message
-		UpdateConversationHistoryText(string(aiContent), "system")
+		UpdateConversationHistoryText(string(aiContent), "user")
 	}
 
 	if claudeContent, err := os.ReadFile("CLAUDE.md"); err == nil {
 		// Add CLAUDE.md content as system message
-		UpdateConversationHistoryText(string(claudeContent), "system")
+		UpdateConversationHistoryText(string(claudeContent), "user")
 	}
 
 	return nil
