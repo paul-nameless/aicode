@@ -258,12 +258,12 @@ type ToolCallResult struct {
 	Output string
 }
 
-func HandleToolCalls(toolCalls []ToolCall) (string, error) {
-	response, _, err := HandleToolCallsWithResults(toolCalls)
+func HandleToolCalls(toolCalls []ToolCall, config Config) (string, error) {
+	response, _, err := HandleToolCallsWithResults(toolCalls, config)
 	return response, err
 }
 
-func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult, error) {
+func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []ToolCallResult, error) {
 	var toolResponse strings.Builder
 
 	var results []ToolCallResult
@@ -276,6 +276,32 @@ func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult,
 		// if debugMode {
 		// 	fmt.Printf("tool: %s(%s)\n", toolName, string(toolCall.Input))
 		// }
+
+		// Get the global config to check enabled tools
+		// Check if the tool is enabled
+		toolEnabled := false
+		if debugMode {
+			// In debug mode, access global config directly for tools
+			for _, enabledTool := range config.EnabledTools {
+				if enabledTool == toolName {
+					toolEnabled = true
+					break
+				}
+			}
+		} else {
+			// Not in debug mode, assume all tools are enabled
+			toolEnabled = true 
+		}
+		
+		if !toolEnabled {
+			result := fmt.Sprintf("Tool %s is not enabled. Use the --tools flag to enable it.", toolName)
+			results = append(results, ToolCallResult{
+				CallID: toolCall.ID,
+				Output: result,
+			})
+			toolResponse.WriteString(fmt.Sprintf("%s\n", result))
+			continue
+		}
 
 		// Execute the tool based on the name
 		var result string
@@ -789,8 +815,23 @@ func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
 		return "", fmt.Errorf("failed to get executable path: %v", err)
 	}
 
-	// Create command to run the same executable with the prompt
-	cmd := exec.Command(execPath, "-q", params.Prompt)
+	// Get dispatch agent tools from DefaultDispatchAgentTools
+	// Only include the tools from DefaultDispatchAgentTools that are also enabled in config
+	var dispatchAgentTools []string
+	for _, tool := range DefaultDispatchAgentTools {
+		for _, enabledTool := range config.EnabledTools {
+			if tool == enabledTool {
+				dispatchAgentTools = append(dispatchAgentTools, tool)
+				break
+			}
+		}
+	}
+	
+	// Build the tools parameter string
+	toolsParam := strings.Join(dispatchAgentTools, ",")
+
+	// Create command to run the same executable with the prompt and tools parameter
+	cmd := exec.Command(execPath, "-q", "-tools", toolsParam, params.Prompt)
 
 	// Set environment variables
 	cmd.Env = os.Environ()

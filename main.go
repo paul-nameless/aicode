@@ -20,7 +20,7 @@ func formatTokenCount(count int) string {
 }
 
 // runSimpleMode processes a single prompt in non-interactive mode
-func runSimpleMode(prompt string, llm Llm) {
+func runSimpleMode(prompt string, llm Llm, config Config) {
 	// Update conversation history with the user prompt
 	UpdateConversationHistoryText(prompt, "user")
 
@@ -84,7 +84,7 @@ func runSimpleMode(prompt string, llm Llm) {
 }
 
 // runInteractiveMode reads user input in a loop until Ctrl+C/D
-func runInteractiveMode(llm Llm) {
+func runInteractiveMode(llm Llm, config Config) {
 	// Get model from environment variable or use default based on provider
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
@@ -126,7 +126,7 @@ func runInteractiveMode(llm Llm) {
 			}
 
 			// Process tool calls
-			_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls)
+			_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls, config)
 			if err != nil {
 				if debugMode {
 					fmt.Fprintf(os.Stderr, "Error handling tool calls: %v\n", err)
@@ -166,15 +166,31 @@ func runInteractiveMode(llm Llm) {
 // Global debug flag
 var debugMode bool
 
-// initLLM initializes the appropriate LLM provider based on configuration
-func initLLM(configPath string) (Llm, error) {
-	var llm Llm
+// AllTools is a list of all available tools
+var AllTools = []string{
+	"GrepTool",
+	"GlobTool",
+	"FindFilesTool",
+	"Bash",
+	"Ls",
+	"View",
+	"Edit",
+	"Replace",
+	"Fetch",
+	"dispatch_agent",
+}
 
-	// Load configuration
-	config, err := LoadConfig(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load configuration: %v", err)
-	}
+// DefaultDispatchAgentTools is the list of tools available to dispatch_agent by default
+var DefaultDispatchAgentTools = []string{
+	"GlobTool",
+	"GrepTool",
+	"Ls",
+	"View",
+}
+
+// initLLM initializes the appropriate LLM provider based on configuration
+func initLLM(config Config) (Llm, error) {
+	var llm Llm
 
 	// Set global debug flag
 	debugMode = config.Debug
@@ -207,13 +223,77 @@ func expandHomeDir(path string) string {
 	return filepath.Join(usr.HomeDir, path[1:])
 }
 
+// initializeTools sets up the enabled tools based on user input and updates the config
+func initializeTools(toolsFlag string, config *Config) {
+	// Initialize enabled tools map in config if it's nil
+	if config.EnabledTools == nil {
+		config.EnabledTools = []string{}
+	}
+	
+	// If no tools flag is provided, use what's in config or enable all tools
+	if toolsFlag == "" {
+		// If config doesn't have enabled tools specified, enable all tools
+		if len(config.EnabledTools) == 0 {
+			config.EnabledTools = make([]string, len(AllTools))
+			copy(config.EnabledTools, AllTools)
+		}
+		return
+	}
+	
+	// Parse the comma-separated list of tools
+	requestedTools := strings.Split(toolsFlag, ",")
+	
+	// Reset enabled tools
+	config.EnabledTools = []string{}
+	
+	// Validate each tool
+	for _, tool := range requestedTools {
+		tool = strings.TrimSpace(tool)
+		if tool == "" {
+			continue
+		}
+		
+		// Check if the tool is valid
+		validTool := false
+		for _, availableTool := range AllTools {
+			if tool == availableTool {
+				validTool = true
+				break
+			}
+		}
+		
+		if validTool {
+			config.EnabledTools = append(config.EnabledTools, tool)
+		} else {
+			fmt.Fprintf(os.Stderr, "Warning: Unknown tool '%s' will be ignored\n", tool)
+		}
+	}
+	
+	// If no valid tools were provided, enable all tools
+	if len(config.EnabledTools) == 0 {
+		fmt.Fprintf(os.Stderr, "Warning: No valid tools specified, enabling all tools\n")
+		config.EnabledTools = make([]string, len(AllTools))
+		copy(config.EnabledTools, AllTools)
+	}
+}
+
 func main() {
 	// Parse command line flags
 	quietFlag := flag.Bool("q", false, "Run in simple mode with a single prompt")
 	configFlag := flag.String("p", "~/.config/aicode/config.yml", "Profile/config file")
+	toolsFlag := flag.String("tools", "", "Comma-separated list of tools to enable (default: all tools)")
 	flag.Parse()
 
 	configPath := expandHomeDir(*configFlag)
+
+	// Load configuration
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to load configuration: %v\n", err)
+	}
+	
+	// Initialize enabled tools
+	initializeTools(*toolsFlag, &config)
 
 	// Initialize context and load system prompts
 	if err := InitContext(); err != nil {
@@ -221,7 +301,7 @@ func main() {
 	}
 
 	// Initialize LLM provider with configuration
-	llm, err := initLLM(configPath)
+	llm, err := initLLM(config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize LLM provider: %v\n", err)
 		os.Exit(1)

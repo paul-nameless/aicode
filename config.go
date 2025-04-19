@@ -11,13 +11,14 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	ApiKeyShell    string `yaml:"api_key_shell"`
-	ApiKey         string `yaml:"api_key"`
-	Provider       string `yaml:"provider"`
-	Model          string `yaml:"model"`
-	InitialPrompt  string `yaml:"initial_prompt"`
-	NonInteractive bool   `yaml:"non_interactive"`
-	Debug          bool   `yaml:"debug"`
+	ApiKeyShell    string   `yaml:"api_key_shell"`
+	ApiKey         string   `yaml:"api_key"`
+	Provider       string   `yaml:"provider"`
+	Model          string   `yaml:"model"`
+	InitialPrompt  string   `yaml:"initial_prompt"`
+	NonInteractive bool     `yaml:"non_interactive"`
+	Debug          bool     `yaml:"debug"`
+	EnabledTools   []string `yaml:"enabled_tools"`
 }
 
 // LoadConfig loads configuration from a YAML file
