@@ -271,7 +271,7 @@ func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult,
 	for _, toolCall := range toolCalls {
 		toolName := toolCall.Name
 
-		toolResponse.WriteString(fmt.Sprintf("tool: %s(%s)\n", toolName, string(toolCall.Input)))
+		fmt.Printf("tool: %s(%s)\n", toolName, string(toolCall.Input))
 
 		// Execute the tool based on the name
 		var result string
@@ -335,7 +335,7 @@ func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult,
 	}
 
 	// Print the results to stdout for debugging
-	fmt.Println(toolResponse.String())
+	// fmt.Println(toolResponse.String())
 
 	return toolResponse.String(), results, nil
 }
