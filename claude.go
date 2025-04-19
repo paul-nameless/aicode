@@ -360,6 +360,7 @@ type Claude struct {
 	OutputPricePerMillion float64 // Price per million output tokens
 	Config                Config  // Configuration
 	apiKey                string  // API key for Claude API
+	ContextWindowSize     int     // Maximum context window size in tokens
 }
 
 // CalculatePrice calculates the price for Claude API usage
@@ -387,6 +388,7 @@ func NewClaude(config Config) *Claude {
 		OutputTokens:          0,
 		InputPricePerMillion:  3.0,  // $3 per million input tokens
 		OutputPricePerMillion: 15.0, // $15 per million output tokens
+		ContextWindowSize:     200_000,
 	}
 }
 
