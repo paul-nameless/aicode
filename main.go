@@ -28,6 +28,8 @@ func runSimpleMode(prompt string, llm Llm) {
 	history := GetConversationHistory()
 	messages := ConvertToInterfaces(history)
 
+	var finalResponse string
+
 	// Process the initial request and any tool calls
 	for {
 		// Get response from LLM
@@ -37,10 +39,12 @@ func runSimpleMode(prompt string, llm Llm) {
 			os.Exit(1)
 		}
 
+		// Store the response content for later output
+		finalResponse = inferenceResponse.Content
+
 		// Check if we have tool calls
 		if len(inferenceResponse.ToolCalls) == 0 {
-			// No tool calls, print the response and exit
-			fmt.Println(inferenceResponse.Content)
+			// No tool calls, we'll print the response outside the loop
 			// The assistant message is already added to history in the Inference method
 			break
 		}
@@ -48,7 +52,9 @@ func runSimpleMode(prompt string, llm Llm) {
 		// Process tool calls
 		_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error handling tool calls: %v\n", err)
+			if debugMode {
+				fmt.Fprintf(os.Stderr, "Error handling tool calls: %v\n", err)
+			}
 			break
 		}
 
@@ -63,12 +69,17 @@ func runSimpleMode(prompt string, llm Llm) {
 		messages = ConvertToInterfaces(history)
 	}
 
-	// Print token usage and price if available
-	if claude, ok := llm.(*Claude); ok {
-		price := claude.CalculatePrice()
-		inputDisplay := formatTokenCount(claude.InputTokens)
-		outputDisplay := formatTokenCount(claude.OutputTokens)
-		fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
+	// In quiet mode, only print the final response content
+	fmt.Println(finalResponse)
+
+	// Print token usage and price if debug mode is enabled
+	if debugMode {
+		if claude, ok := llm.(*Claude); ok {
+			price := claude.CalculatePrice()
+			inputDisplay := formatTokenCount(claude.InputTokens)
+			outputDisplay := formatTokenCount(claude.OutputTokens)
+			fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
+		}
 	}
 }
 
@@ -117,7 +128,9 @@ func runInteractiveMode(llm Llm) {
 			// Process tool calls
 			_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error handling tool calls: %v\n", err)
+				if debugMode {
+					fmt.Fprintf(os.Stderr, "Error handling tool calls: %v\n", err)
+				}
 				break
 			}
 
@@ -132,12 +145,14 @@ func runInteractiveMode(llm Llm) {
 			messages = ConvertToInterfaces(history)
 		}
 
-		// Print token usage and price if available
-		if claude, ok := llm.(*Claude); ok {
-			price := claude.CalculatePrice()
-			inputDisplay := formatTokenCount(claude.InputTokens)
-			outputDisplay := formatTokenCount(claude.OutputTokens)
-			fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
+		// Print token usage and price if debug mode is enabled
+		if debugMode {
+			if claude, ok := llm.(*Claude); ok {
+				price := claude.CalculatePrice()
+				inputDisplay := formatTokenCount(claude.InputTokens)
+				outputDisplay := formatTokenCount(claude.OutputTokens)
+				fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
+			}
 		}
 		fmt.Println(strings.Repeat("━", 64))
 	}
@@ -148,6 +163,9 @@ func runInteractiveMode(llm Llm) {
 	}
 }
 
+// Global debug flag
+var debugMode bool
+
 // initLLM initializes the appropriate LLM provider based on configuration
 func initLLM(configPath string) (Llm, error) {
 	var llm Llm
@@ -157,6 +175,9 @@ func initLLM(configPath string) (Llm, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %v", err)
 	}
+
+	// Set global debug flag
+	debugMode = config.Debug
 
 	// Choose provider based on configuration or available API keys
 	if config.Provider == "claude" || os.Getenv("ANTHROPIC_API_KEY") != "" {

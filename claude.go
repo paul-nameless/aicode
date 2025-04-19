@@ -99,11 +99,6 @@ func loadClaudeTools() ([]claudeTool, error) {
 
 	// Process each tool
 	for toolName, toolInfo := range toolData {
-		// Skip dispatch_agent if needed
-		if toolName == "dispatch_agent" {
-			continue
-		}
-
 		// Parse the JSON schema
 		var toolSchema struct {
 			Name        string          `json:"name"`
@@ -142,14 +137,18 @@ func (c *Claude) Inference(messages []interface{}) (InferenceResponse, error) {
 func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (InferenceResponse, error) {
 	// Check if we need to summarize the conversation
 	if c.shouldSummarizeConversation() || isRetry {
-		fmt.Println("Context usage approaching limit. Summarizing conversation...")
+		if debugMode {
+			fmt.Println("Context usage approaching limit. Summarizing conversation...")
+		}
 		beforeCount := len(conversationHistory)
 		beforeTokens := c.InputTokens
 
 		err := c.summarizeConversation(messages)
 		if err != nil {
-			fmt.Printf("Warning: Failed to summarize conversation: %v\n", err)
-		} else {
+			if debugMode {
+				fmt.Printf("Warning: Failed to summarize conversation: %v\n", err)
+			}
+		} else if debugMode {
 			afterCount := len(conversationHistory)
 			afterTokens := c.InputTokens
 			reductionPercent := 100 - (float64(afterTokens) * 100 / float64(beforeTokens))
@@ -218,21 +217,16 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 		return InferenceResponse{}, err
 	}
 	defer resp.Body.Close()
-	
+
 	// Check for rate limit error (HTTP 429)
 	if resp.StatusCode == 429 && !isRetry {
-		fmt.Println("Received rate limit (429) error. Summarizing conversation and retrying...")
+		if debugMode {
+			fmt.Println("Received rate limit (429) error. Summarizing conversation and retrying...")
+		}
 		return c.inferenceWithRetry(messages, true)
 	}
-	
-	body, _ := io.ReadAll(resp.Body)
 
-	// For debugging
-	// if len(body) > 200 {
-	// 	fmt.Printf("Claude response (first 200 chars): %s...\n", string(body[:200]))
-	// } else {
-	// 	fmt.Printf("Claude response: %s\n", string(body))
-	// }
+	body, _ := io.ReadAll(resp.Body)
 
 	var out claudeResponse
 	if err := json.Unmarshal(body, &out); err != nil {
@@ -241,9 +235,12 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 
 	if out.Error != nil {
 		// Check if the error is about rate limiting and we haven't retried yet
-		if (strings.Contains(strings.ToLower(out.Error.Message), "rate limit") || 
-		    strings.Contains(strings.ToLower(out.Error.Message), "too many requests")) && !isRetry {
-			fmt.Println("Received rate limit error in response. Summarizing conversation and retrying...")
+		fmt.Printf("Inference error: url=%s, error=%s\n", url, out.Error.Message)
+		if (strings.Contains(strings.ToLower(out.Error.Message), "rate limit") ||
+			strings.Contains(strings.ToLower(out.Error.Message), "too many requests")) && !isRetry {
+			if debugMode {
+				fmt.Println("Received rate limit error in response. Summarizing conversation and retrying...")
+			}
 			return c.inferenceWithRetry(messages, true)
 		}
 		return InferenceResponse{}, errors.New(out.Error.Message)
@@ -362,6 +359,10 @@ func convertToClaudeContent(content interface{}) interface{} {
 func (c *Claude) executeTool(toolName string, toolInput json.RawMessage) (string, error) {
 	fmt.Printf("  tool: %s(%s)\n", toolName, string(toolInput))
 
+	// if debugMode {
+	// 	fmt.Printf("  tool: %s(%s)\n", toolName, string(toolInput))
+	// }
+
 	var result string
 	var err error
 
@@ -380,6 +381,8 @@ func (c *Claude) executeTool(toolName string, toolInput json.RawMessage) (string
 		result, err = ExecuteEditTool(toolInput)
 	case "Fetch":
 		result, err = ExecuteFetchTool(toolInput)
+	case "dispatch_agent":
+		result, err = ExecuteDispatchAgentTool(toolInput)
 	default:
 		return "", fmt.Errorf("tool %s is not implemented", toolName)
 	}
@@ -512,6 +515,7 @@ func (c *Claude) summarizeConversation(messages []interface{}) error {
 	}
 
 	if out.Error != nil {
+		fmt.Printf("Inference error: url=%s, error=%s\n", url, out.Error.Message)
 		return errors.New(out.Error.Message)
 	}
 

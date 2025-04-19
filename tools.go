@@ -272,6 +272,10 @@ func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult,
 		toolName := toolCall.Name
 
 		fmt.Printf("tool: %s(%s)\n", toolName, string(toolCall.Input))
+		// Only print tool information if debug mode is enabled
+		// if debugMode {
+		// 	fmt.Printf("tool: %s(%s)\n", toolName, string(toolCall.Input))
+		// }
 
 		// Execute the tool based on the name
 		var result string
@@ -318,6 +322,11 @@ func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult,
 			if err != nil {
 				result = fmt.Sprintf("Error executing Fetch: %v", err)
 			}
+		case "dispatch_agent":
+			result, err = ExecuteDispatchAgentTool(toolCall.Input)
+			if err != nil {
+				result = fmt.Sprintf("Error executing dispatch_agent: %v", err)
+			}
 		default:
 			// For now, other tools aren't implemented yet
 			result = fmt.Sprintf("Tool %s is not implemented yet.", toolName)
@@ -334,8 +343,10 @@ func HandleToolCallsWithResults(toolCalls []ToolCall) (string, []ToolCallResult,
 		}
 	}
 
-	// Print the results to stdout for debugging
-	// fmt.Println(toolResponse.String())
+	// Only print debugging info if debug mode is enabled
+	if debugMode {
+		fmt.Println(toolResponse.String())
+	}
 
 	return toolResponse.String(), results, nil
 }
@@ -752,6 +763,48 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// DispatchAgentToolParams represents the parameters for the dispatch_agent tool
+type DispatchAgentToolParams struct {
+	Prompt string `json:"prompt"`
+}
+
+// ExecuteDispatchAgentTool launches a new instance of this application with the same configuration
+// to process a prompt and return the summarized response
+func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
+	params, err := parseToolParams[DispatchAgentToolParams](paramsJSON, "Prompt")
+	if err != nil {
+		return "", fmt.Errorf("failed to parse dispatch_agent tool parameters: %v", err)
+	}
+
+	// Validate parameters
+	if params.Prompt == "" {
+		return "", fmt.Errorf("prompt parameter is required")
+	}
+
+	// Get the path to the current executable
+	execPath, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("failed to get executable path: %v", err)
+	}
+
+	// Create command to run the same executable with the prompt
+	cmd := exec.Command(execPath, "-q", params.Prompt)
+
+	// Set environment variables
+	cmd.Env = os.Environ()
+
+	// Capture stdout
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("error executing command: %v", err)
+	}
+
+	// Return the output (which should be just the response in quiet mode)
+	fmt.Printf("Simulacrum output:\n%s\n", string(output))
+	fmt.Printf("===\n")
+	return string(output), nil
 }
 
 // formatResults formats the grep results as a string
