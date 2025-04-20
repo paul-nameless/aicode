@@ -280,7 +280,13 @@ func (o *OpenAI) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 
 // convertMessagesToOpenAIFormat converts messages with content blocks to OpenAI format
 func convertMessagesToOpenAIFormat(messages []interface{}) []interface{} {
-	result := make([]interface{}, 0, len(messages))
+	// Add system message at beginning with defaultSystemPrompt
+	result := []interface{}{
+		map[string]interface{}{
+			"role":    "system",
+			"content": defaultSystemPrompt,
+		},
+	}
 
 	for _, msg := range messages {
 		if msgMap, ok := msg.(map[string]interface{}); ok {
