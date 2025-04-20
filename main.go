@@ -74,10 +74,16 @@ func runSimpleMode(prompt string, llm Llm, config Config) {
 
 	// Print token usage and price if debug mode is enabled
 	if debugMode {
-		if claude, ok := llm.(*Claude); ok {
-			price := claude.CalculatePrice()
-			inputDisplay := formatTokenCount(claude.InputTokens)
-			outputDisplay := formatTokenCount(claude.OutputTokens)
+		switch provider := llm.(type) {
+		case *Claude:
+			price := provider.CalculatePrice()
+			inputDisplay := formatTokenCount(provider.InputTokens)
+			outputDisplay := formatTokenCount(provider.OutputTokens)
+			fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
+		case *OpenAI:
+			price := provider.CalculatePrice()
+			inputDisplay := formatTokenCount(provider.InputTokens)
+			outputDisplay := formatTokenCount(provider.OutputTokens)
 			fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
 		}
 	}
@@ -147,10 +153,16 @@ func runInteractiveMode(llm Llm, config Config) {
 
 		// Print token usage and price if debug mode is enabled
 		if debugMode {
-			if claude, ok := llm.(*Claude); ok {
-				price := claude.CalculatePrice()
-				inputDisplay := formatTokenCount(claude.InputTokens)
-				outputDisplay := formatTokenCount(claude.OutputTokens)
+			switch provider := llm.(type) {
+			case *Claude:
+				price := provider.CalculatePrice()
+				inputDisplay := formatTokenCount(provider.InputTokens)
+				outputDisplay := formatTokenCount(provider.OutputTokens)
+				fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
+			case *OpenAI:
+				price := provider.CalculatePrice()
+				inputDisplay := formatTokenCount(provider.InputTokens)
+				outputDisplay := formatTokenCount(provider.OutputTokens)
 				fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
 			}
 		}
@@ -199,7 +211,7 @@ func initLLM(config Config) (Llm, error) {
 	if config.Provider == "claude" || os.Getenv("ANTHROPIC_API_KEY") != "" {
 		llm = NewClaude(config)
 	} else {
-		llm = NewOpenAI()
+		llm = NewOpenAI(config)
 	}
 
 	// Initialize the provider with configuration
