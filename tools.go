@@ -126,7 +126,7 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 	rgCmd = strings.ReplaceAll(rgCmd, "\t", "")
 
 	// Execute the ripgrep command
-	result, err := executeCommand(rgCmd, 0)
+	result, _ := executeCommand(rgCmd)
 	return result, nil
 }
 
@@ -274,13 +274,7 @@ func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []
 	return toolResponse.String(), results, nil
 }
 
-func executeCommand(command string, timeout int) (string, error) {
-	if timeout > 0 {
-		if timeout > 600000 {
-			timeout = 600000
-		}
-	}
-
+func executeCommand(command string) (string, error) {
 	// Create a command to execute the bash command
 	cmd := exec.Command("bash", "-c", command)
 
@@ -329,7 +323,7 @@ func ExecuteFindFilesTool(paramsJSON json.RawMessage) (string, error) {
 		escapedPattern, escapedPath)
 
 	// Execute the command
-	result, err := executeCommand(cmd, 0)
+	result, err := executeCommand(cmd)
 	if err != nil {
 		return "", fmt.Errorf("error executing glob command: %v", err)
 	}
@@ -409,7 +403,7 @@ func ExecuteLsTool(paramsJSON json.RawMessage) (string, error) {
 	}
 
 	// Execute the command
-	result, err := executeCommand(lsCmd, 0)
+	result, err := executeCommand(lsCmd)
 	if err != nil {
 		return "", fmt.Errorf("error executing ls command: %v", err)
 	}
@@ -435,7 +429,7 @@ func ExecuteBashTool(paramsJSON json.RawMessage) (string, error) {
 	}
 
 	// Execute the command using the extracted function
-	return executeCommand(params.Command, params.Timeout)
+	return executeCommand(params.Command)
 }
 
 // ViewToolParams represents the parameters for the ViewTool
@@ -495,7 +489,7 @@ func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
 	}
 
 	// Execute the command
-	result, err := executeCommand(cmd, 0)
+	result, err := executeCommand(cmd)
 	if err != nil {
 		return "", fmt.Errorf("error reading file: %v", err)
 	}
@@ -539,7 +533,7 @@ func ExecuteFetchTool(paramsJSON json.RawMessage) (string, error) {
 	curlCmd += fmt.Sprintf(" '%s'", strings.ReplaceAll(params.URL, "'", "'\\''"))
 
 	// Execute the curl command
-	result, err := executeCommand(curlCmd, 0)
+	result, err := executeCommand(curlCmd)
 	if err != nil {
 		return "", fmt.Errorf("error executing fetch command: %v", err)
 	}
@@ -704,9 +698,7 @@ func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
 	// Get dispatch agent tools from DefaultDispatchAgentTools
 	// Only include the tools from DefaultDispatchAgentTools that are also enabled in config
 	var dispatchAgentTools []string
-	for _, tool := range DefaultDispatchAgentTools {
-		dispatchAgentTools = append(dispatchAgentTools, tool)
-	}
+	dispatchAgentTools = append(dispatchAgentTools, DefaultDispatchAgentTools...)
 
 	// Build the tools parameter string
 	toolsParam := strings.Join(dispatchAgentTools, ",")
