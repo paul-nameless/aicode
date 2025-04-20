@@ -1,0 +1,18 @@
+{
+  "name": "FindFilesTool",
+  "description": "Fast file pattern matching tool that works with any codebase size.",
+  "parameters": {
+    "type": "object",
+    "required": ["pattern"],
+    "properties": {
+      "pattern": {
+        "type": "string",
+        "description": "The glob pattern to match files against"
+      },
+      "path": {
+        "type": "string",
+        "description": "The directory to search in. If not specified, the current working directory will be used."
+      }
+    }
+  }
+}
