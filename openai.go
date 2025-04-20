@@ -119,7 +119,6 @@ func LoadOpenAIContext() error {
 	return nil
 }
 
-
 // Inference implements the Llm interface for OpenAI
 func (o *OpenAI) Inference(messages []interface{}) (InferenceResponse, error) {
 	// Try inference with potential retry for rate limiting
@@ -402,7 +401,7 @@ func (o *OpenAI) summarizeConversation(messages []interface{}) error {
 	// This makes it clearer to the model what we want
 	convertedMessages = append(convertedMessages, map[string]interface{}{
 		"role":    "user",
-		"content": "Please summarize our conversation so far. Be concise but include all important information.",
+		"content": summaryPrompt,
 	})
 
 	// Create a request to summarize the conversation
@@ -512,4 +511,3 @@ func (o *OpenAI) Init(config Config) error {
 	o.Config = config
 	return LoadOpenAIContext()
 }
-

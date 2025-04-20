@@ -56,7 +56,6 @@ type claudeContentBlock struct {
 	Content   string          `json:"content,omitempty"`
 }
 
-
 type claudeResponse struct {
 	ID         string               `json:"id"`
 	Type       string               `json:"type"`
@@ -372,7 +371,6 @@ func convertToClaudeContent(content interface{}) interface{} {
 	return content
 }
 
-
 // Claude struct implements Llm interface
 type Claude struct {
 	Model                 string
@@ -395,7 +393,6 @@ func (c *Claude) shouldSummarizeConversation() bool {
 	contextThreshold := int(float64(c.ContextWindowSize) * 0.8)
 	return usedTokens > contextThreshold
 }
-
 
 // summarizeConversation creates a summary of the conversation history
 // and replaces the history with the summary, while preserving the last user message
@@ -442,7 +439,7 @@ func (c *Claude) summarizeConversation(messages []interface{}) error {
 	systemMessages := []claudeSystemMessage{
 		{
 			Type:         "text",
-			Text:         defaultSystemPrompt,
+			Text:         summaryPrompt,
 			CacheControl: &claudeCacheControl{Type: "ephemeral"},
 		},
 	}
