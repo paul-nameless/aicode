@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -136,103 +135,6 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 	return result, nil
 }
 
-func searchFiles(rootPath string, pattern *regexp.Regexp, includePattern string) ([]GrepResult, error) {
-	var results []GrepResult
-
-	// Ensure rootPath exists
-	if _, err := os.Stat(rootPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("path does not exist: %s", rootPath)
-	}
-
-	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil // Skip this file/directory but continue walking
-		}
-
-		// Skip directories
-		if info.IsDir() {
-			return nil
-		}
-
-		// Check if file matches include pattern
-		if includePattern != "" {
-			// Handle glob patterns like "*.{js,ts}"
-			if strings.Contains(includePattern, "{") && strings.Contains(includePattern, "}") {
-				// Extract patterns between braces
-				startIdx := strings.Index(includePattern, "{")
-				endIdx := strings.Index(includePattern, "}")
-
-				if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
-					prefix := includePattern[:startIdx]
-					patterns := strings.Split(includePattern[startIdx+1:endIdx], ",")
-					suffix := includePattern[endIdx+1:]
-
-					matched := false
-					for _, p := range patterns {
-						fullPattern := prefix + p + suffix
-						if m, err := filepath.Match(fullPattern, filepath.Base(path)); err == nil && m {
-							matched = true
-							break
-						}
-					}
-
-					if !matched {
-						return nil // Skip this file
-					}
-				}
-			} else {
-				// Simple pattern matching
-				match, err := filepath.Match(includePattern, filepath.Base(path))
-				if err != nil {
-					return nil // Invalid pattern, skip but continue
-				}
-				if !match {
-					return nil // File doesn't match pattern, skip
-				}
-			}
-		}
-
-		// Skip binary files or very large files
-		if info.Size() > 10*1024*1024 { // Skip files larger than 10MB
-			return nil
-		}
-
-		// Read file content
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return nil // Skip this file but continue walking
-		}
-
-		// Convert to string and search for matches
-		contentStr := string(content)
-		matches := pattern.FindAllString(contentStr, -1)
-
-		if len(matches) > 0 {
-			// Deduplicate matches
-			uniqueMatches := make(map[string]bool)
-			for _, match := range matches {
-				uniqueMatches[match] = true
-			}
-
-			// Convert back to slice
-			matchesSlice := make([]string, 0, len(uniqueMatches))
-			for match := range uniqueMatches {
-				matchesSlice = append(matchesSlice, match)
-			}
-
-			// Add to results
-			results = append(results, GrepResult{
-				FilePath: path,
-				Matches:  matchesSlice,
-				ModTime:  info.ModTime(),
-			})
-		}
-
-		return nil
-	})
-
-	return results, err
-}
 
 type FetchToolParams struct {
 	URL     string            `json:"url"`
@@ -778,18 +680,7 @@ func ExecuteEditTool(paramsJSON json.RawMessage) (string, error) {
 	return fmt.Sprintf("Successfully edited file %s, replacing %d occurrence(s) of old_string with new_string.", params.FilePath, expectedReplacements), nil
 }
 
-// countLines counts the number of lines in a string
-func countLines(s string) int {
-	return len(strings.Split(s, "\n"))
-}
 
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 
 // DispatchAgentToolParams represents the parameters for the dispatch_agent tool
 type DispatchAgentToolParams struct {
@@ -843,44 +734,3 @@ func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
 	return string(output), nil
 }
 
-// formatResults formats the grep results as a string
-func formatResults(results []GrepResult) string {
-	if len(results) == 0 {
-		return "No matches found."
-	}
-
-	var sb strings.Builder
-	totalMatches := 0
-	for _, result := range results {
-		totalMatches += len(result.Matches)
-	}
-
-	sb.WriteString(fmt.Sprintf("Found %d matches in %d files:\n\n", totalMatches, len(results)))
-
-	// Limit the number of files and matches to display to avoid overwhelming output
-	maxFilesToShow := 20
-	// maxMatchesPerFile := 5
-
-	for i, result := range results {
-		if i >= maxFilesToShow {
-			remaining := len(results) - maxFilesToShow
-			sb.WriteString(fmt.Sprintf("\n... and %d more files not shown\n", remaining))
-			break
-		}
-
-		sb.WriteString(fmt.Sprintf("%s\n", result.FilePath))
-
-		// if len(result.Matches) <= maxMatchesPerFile {
-		// 	// Show all matches
-		// 	sb.WriteString(fmt.Sprintf("Matches: %s\n\n", strings.Join(result.Matches, ", ")))
-		// } else {
-		// 	// Show limited matches with a count
-		// 	matches := result.Matches[:maxMatchesPerFile]
-		// 	sb.WriteString(fmt.Sprintf("Matches (%d total): %s, ...\n\n",
-		// 		len(result.Matches),
-		// 		strings.Join(matches, ", ")))
-		// }
-	}
-
-	return sb.String()
-}

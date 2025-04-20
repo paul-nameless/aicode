@@ -401,27 +401,6 @@ func (c *Claude) shouldSummarizeConversation() bool {
 	return usedTokens > contextThreshold
 }
 
-// countWords counts the number of words in a string
-func countWords(s string) int {
-	if s == "" {
-		return 0
-	}
-
-	// Simple word count by splitting on whitespace
-	words := 0
-	inWord := false
-
-	for _, r := range s {
-		if r == ' ' || r == '\n' || r == '\t' || r == '\r' {
-			inWord = false
-		} else if !inWord {
-			words++
-			inWord = true
-		}
-	}
-
-	return words
-}
 
 // summarizeConversation creates a summary of the conversation history
 // and replaces the history with the summary, while preserving the last user message
