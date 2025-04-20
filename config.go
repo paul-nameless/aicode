@@ -13,7 +13,6 @@ import (
 type Config struct {
 	ApiKeyShell    string   `yaml:"api_key_shell"`
 	ApiKey         string   `yaml:"api_key"`
-	Provider       string   `yaml:"provider"`
 	Model          string   `yaml:"model"`
 	InitialPrompt  string   `yaml:"initial_prompt"`
 	NonInteractive bool     `yaml:"non_interactive"`
@@ -27,7 +26,6 @@ func LoadConfig(configPath string) (Config, error) {
 	config := Config{}
 
 	// Default values
-	config.Provider = "openai"
 	config.Model = "gpt-4.1-nano"
 	config.Debug = false
 	config.NonInteractive = false
