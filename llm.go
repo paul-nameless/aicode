@@ -27,6 +27,7 @@ type Llm interface {
 	CalculatePrice() float64
 }
 
+
 // ContentBlock represents a block of content in a message (text or tool related)
 type ContentBlock struct {
 	Type      string          `json:"type"` // "text", "tool_use", or "tool_result"

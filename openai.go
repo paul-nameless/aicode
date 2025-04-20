@@ -526,39 +526,3 @@ func (o *OpenAI) Init(config Config) error {
 	return LoadOpenAIContext()
 }
 
-// executeTool runs the actual tool implementation
-func (o *OpenAI) executeTool(toolName string, toolInput json.RawMessage) (string, error) {
-	if debugMode {
-		fmt.Printf("  tool: %s(%s)\n", toolName, string(toolInput))
-	}
-
-	var result string
-	var err error
-
-	switch toolName {
-	case "GrepTool":
-		result, err = ExecuteGrepTool(toolInput)
-	case "FindFilesTool":
-		result, err = ExecuteFindFilesTool(toolInput)
-	case "Bash":
-		result, err = ExecuteBashTool(toolInput)
-	case "Ls":
-		result, err = ExecuteLsTool(toolInput)
-	case "View":
-		result, err = ExecuteViewTool(toolInput)
-	case "Edit":
-		result, err = ExecuteEditTool(toolInput)
-	case "Fetch":
-		result, err = ExecuteFetchTool(toolInput)
-	case "dispatch_agent":
-		result, err = ExecuteDispatchAgentTool(toolInput)
-	default:
-		return "", fmt.Errorf("tool %s is not implemented", toolName)
-	}
-
-	if err != nil {
-		return "", fmt.Errorf("error executing %s: %v", toolName, err)
-	}
-
-	return result, nil
-}
