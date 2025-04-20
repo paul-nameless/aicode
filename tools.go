@@ -290,9 +290,9 @@ func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []
 			}
 		} else {
 			// Not in debug mode, assume all tools are enabled
-			toolEnabled = true 
+			toolEnabled = true
 		}
-		
+
 		if !toolEnabled {
 			result := fmt.Sprintf("Tool %s is not enabled. Use the --tools flag to enable it.", toolName)
 			results = append(results, ToolCallResult{
@@ -819,14 +819,9 @@ func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
 	// Only include the tools from DefaultDispatchAgentTools that are also enabled in config
 	var dispatchAgentTools []string
 	for _, tool := range DefaultDispatchAgentTools {
-		for _, enabledTool := range config.EnabledTools {
-			if tool == enabledTool {
-				dispatchAgentTools = append(dispatchAgentTools, tool)
-				break
-			}
-		}
+		dispatchAgentTools = append(dispatchAgentTools, tool)
 	}
-	
+
 	// Build the tools parameter string
 	toolsParam := strings.Join(dispatchAgentTools, ",")
 

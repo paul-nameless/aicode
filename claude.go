@@ -15,23 +15,35 @@ import (
 var claudeTools []claudeTool // Store the tools loaded at startup
 
 type claudeRequest struct {
-	Model       string          `json:"model"`
-	Messages    []claudeMessage `json:"messages"`
-	System      string          `json:"system,omitempty"`
-	Tools       []claudeTool    `json:"tools,omitempty"`
-	MaxTokens   int             `json:"max_tokens"`
-	Temperature float64         `json:"temperature,omitempty"`
+	Model       string                `json:"model"`
+	Messages    []claudeMessage       `json:"messages"`
+	System      []claudeSystemMessage `json:"system,omitempty"`
+	Tools       []claudeTool          `json:"tools,omitempty"`
+	MaxTokens   int                   `json:"max_tokens"`
+	Temperature float64               `json:"temperature,omitempty"`
+}
+
+type claudeCacheControl struct {
+	Type string `json:"type"`
 }
 
 type claudeTool struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"input_schema"`
+	Name         string              `json:"name"`
+	Description  string              `json:"description"`
+	InputSchema  json.RawMessage     `json:"input_schema"`
+	CacheControl *claudeCacheControl `json:"cache_control,omitempty"`
 }
 
 type claudeMessage struct {
-	Role    string      `json:"role"`
-	Content interface{} `json:"content"`
+	Role         string              `json:"role"`
+	Content      interface{}         `json:"content"`
+	CacheControl *claudeCacheControl `json:"cache_control,omitempty"`
+}
+
+type claudeSystemMessage struct {
+	Type         string              `json:"type"`
+	Text         string              `json:"text"`
+	CacheControl *claudeCacheControl `json:"cache_control,omitempty"`
 }
 
 type claudeContentBlock struct {
@@ -124,6 +136,10 @@ func loadClaudeTools() ([]claudeTool, error) {
 		}
 	}
 
+	if len(toolsList) >= 1 {
+		toolsList[len(toolsList)-1].CacheControl = &claudeCacheControl{Type: "ephemeral"}
+	}
+
 	return toolsList, nil
 }
 
@@ -162,26 +178,25 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 
 	// Convert messages to Claude format
 	var claudeMessages []claudeMessage
-	var systemContent string
-
+	// var systemContent string
 	for _, msg := range messages {
 		if msgMap, ok := msg.(map[string]interface{}); ok {
 			role, _ := msgMap["role"].(string)
 			content := msgMap["content"]
 
-			if role == "system" {
-				// For system messages, we just append to systemContent
-				if contentStr, ok := content.(string); ok {
-					systemContent += contentStr + "\n\n"
-				}
-			} else {
-				// For user and assistant messages, we need to handle different formats
-				msgContent := convertToClaudeContent(content)
-				claudeMessages = append(claudeMessages, claudeMessage{
-					Role:    role,
-					Content: msgContent,
-				})
-			}
+			// if role == "system" {
+			// For system messages, we just append to systemContent
+			// 	if contentStr, ok := content.(string); ok {
+			// 		systemContent += contentStr + "\n\n"
+			// 	}
+			// } else {
+			// For user and assistant messages, we need to handle different formats
+			msgContent := convertToClaudeContent(content)
+			claudeMessages = append(claudeMessages, claudeMessage{
+				Role:    role,
+				Content: msgContent,
+			})
+			// }
 		}
 	}
 
@@ -191,14 +206,21 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 		baseURL = "https://api.anthropic.com"
 	}
 
+	systemMessages := []claudeSystemMessage{
+		{
+			Type:         "text",
+			Text:         defaultSystemPrompt,
+			CacheControl: &claudeCacheControl{Type: "ephemeral"},
+		},
+	}
 	// Start a conversation
 	url := baseURL + "/v1/messages"
 	reqBody := claudeRequest{
 		Model:     c.Model,
 		Messages:  claudeMessages,
-		System:    systemContent,
+		System:    systemMessages,
 		Tools:     claudeTools,
-		MaxTokens: 4096,
+		MaxTokens: 20000,
 	}
 
 	// Create request
@@ -451,26 +473,26 @@ func (c *Claude) summarizeConversation(messages []interface{}) error {
 
 	// Convert messages to Claude format for the summarization request
 	var claudeMessages []claudeMessage
-	var systemContent string
+	// var systemContent string
 
 	for _, msg := range messages {
 		if msgMap, ok := msg.(map[string]interface{}); ok {
 			role, _ := msgMap["role"].(string)
 			content := msgMap["content"]
 
-			if role == "system" {
-				// For system messages, we just append to systemContent
-				if contentStr, ok := content.(string); ok {
-					systemContent += contentStr + "\n\n"
-				}
-			} else {
-				// For user and assistant messages, we need to handle different formats
-				msgContent := convertToClaudeContent(content)
-				claudeMessages = append(claudeMessages, claudeMessage{
-					Role:    role,
-					Content: msgContent,
-				})
-			}
+			// if role == "system" {
+			// For system messages, we just append to systemContent
+			// if contentStr, ok := content.(string); ok {
+			// 	systemContent += contentStr + "\n\n"
+			// }
+			// } else {
+			// For user and assistant messages, we need to handle different formats
+			msgContent := convertToClaudeContent(content)
+			claudeMessages = append(claudeMessages, claudeMessage{
+				Role:    role,
+				Content: msgContent,
+			})
+			// }
 		}
 	}
 
@@ -481,13 +503,20 @@ func (c *Claude) summarizeConversation(messages []interface{}) error {
 		Content: "Please summarize our conversation so far following the instructions in the system prompt.",
 	})
 
+	systemMessages := []claudeSystemMessage{
+		{
+			Type:         "text",
+			Text:         defaultSystemPrompt,
+			CacheControl: &claudeCacheControl{Type: "ephemeral"},
+		},
+	}
 	// Create a request to summarize the conversation
 	url := "https://api.anthropic.com/v1/messages"
 	reqBody := claudeRequest{
 		Model:       c.Model,
 		Messages:    claudeMessages,
-		System:      summaryPrompt,
-		MaxTokens:   4096,
+		System:      systemMessages,
+		MaxTokens:   20000,
 		Temperature: 0.2, // Lower temperature for more consistent summaries
 	}
 

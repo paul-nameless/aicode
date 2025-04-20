@@ -50,7 +50,7 @@ func runSimpleMode(prompt string, llm Llm, config Config) {
 		}
 
 		// Process tool calls
-		_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls)
+		_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls, config)
 		if err != nil {
 			if debugMode {
 				fmt.Fprintf(os.Stderr, "Error handling tool calls: %v\n", err)
@@ -229,7 +229,7 @@ func initializeTools(toolsFlag string, config *Config) {
 	if config.EnabledTools == nil {
 		config.EnabledTools = []string{}
 	}
-	
+
 	// If no tools flag is provided, use what's in config or enable all tools
 	if toolsFlag == "" {
 		// If config doesn't have enabled tools specified, enable all tools
@@ -239,20 +239,20 @@ func initializeTools(toolsFlag string, config *Config) {
 		}
 		return
 	}
-	
+
 	// Parse the comma-separated list of tools
 	requestedTools := strings.Split(toolsFlag, ",")
-	
+
 	// Reset enabled tools
 	config.EnabledTools = []string{}
-	
+
 	// Validate each tool
 	for _, tool := range requestedTools {
 		tool = strings.TrimSpace(tool)
 		if tool == "" {
 			continue
 		}
-		
+
 		// Check if the tool is valid
 		validTool := false
 		for _, availableTool := range AllTools {
@@ -261,14 +261,14 @@ func initializeTools(toolsFlag string, config *Config) {
 				break
 			}
 		}
-		
+
 		if validTool {
 			config.EnabledTools = append(config.EnabledTools, tool)
 		} else {
 			fmt.Fprintf(os.Stderr, "Warning: Unknown tool '%s' will be ignored\n", tool)
 		}
 	}
-	
+
 	// If no valid tools were provided, enable all tools
 	if len(config.EnabledTools) == 0 {
 		fmt.Fprintf(os.Stderr, "Warning: No valid tools specified, enabling all tools\n")
@@ -291,7 +291,7 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to load configuration: %v\n", err)
 	}
-	
+
 	// Initialize enabled tools
 	initializeTools(*toolsFlag, &config)
 
@@ -319,10 +319,10 @@ func main() {
 
 		// Join all arguments as the prompt
 		prompt := strings.Join(args, " ")
-		runSimpleMode(prompt, llm)
+		runSimpleMode(prompt, llm, config)
 		return
 	}
 
-	runInteractiveMode(llm)
+	runInteractiveMode(llm, config)
 
 }
