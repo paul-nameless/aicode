@@ -699,7 +699,7 @@ func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
 	toolsParam := strings.Join(dispatchAgentTools, ",")
 
 	// Create command to run the same executable with the prompt and tools parameter
-	cmd := exec.Command(execPath, "-q", "-tools", toolsParam, params.Prompt)
+	cmd := exec.Command(execPath, "-q", "-n", "-tools", toolsParam, params.Prompt)
 
 	// Set environment variables
 	cmd.Env = os.Environ()

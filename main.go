@@ -297,6 +297,7 @@ func initializeTools(toolsFlag string, config *Config) {
 func main() {
 	// Parse command line flags
 	quietFlag := flag.Bool("q", false, "Run in simple mode with a single prompt")
+	nonInteractiveFlag := flag.Bool("n", false, "Run in non-interactive mode")
 	configFlag := flag.String("p", "~/.config/aicode/config.yml", "Profile/config file")
 	toolsFlag := flag.String("tools", "", "Comma-separated list of tools to enable (default: all tools)")
 	flag.Parse()
@@ -311,6 +312,7 @@ func main() {
 
 	// Set config.Quiet to CLI flag if present
 	config.Quiet = config.Quiet || *quietFlag
+	config.NonInteractive = config.NonInteractive || *nonInteractiveFlag
 
 	// Initialize enabled tools
 	initializeTools(*toolsFlag, &config)
@@ -327,13 +329,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	if config.Quiet {
+	if config.NonInteractive {
+		initialPrompt := config.InitialPrompt
 		args := flag.Args()
 		if len(args) != 0 {
-			prompt := strings.Join(args, " ")
-			runSimpleMode(prompt, llm, config)
+			initialPrompt = strings.Join(args, " ")
+		}
+		if initialPrompt != "" {
+			runSimpleMode(initialPrompt, llm, config)
 			return
-
 		}
 	}
 
