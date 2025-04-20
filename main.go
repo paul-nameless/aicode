@@ -72,8 +72,8 @@ func runSimpleMode(prompt string, llm Llm, config Config) {
 	// In quiet mode, only print the final response content
 	fmt.Println(finalResponse)
 
-	// Print token usage and price if debug mode is enabled
-	if debugMode {
+	// Print token usage and price if NOT in quiet mode
+	if !config.Quiet {
 		switch provider := llm.(type) {
 		case *Claude:
 			price := provider.CalculatePrice()
@@ -93,6 +93,9 @@ func runSimpleMode(prompt string, llm Llm, config Config) {
 func runInteractiveMode(llm Llm, config Config) {
 	// Get model from environment variable or use default based on provider
 	scanner := bufio.NewScanner(os.Stdin)
+	if !config.Quiet {
+		fmt.Printf("Model: %s\n", config.Model)
+	}
 	for {
 		fmt.Print("> ")
 		if !scanner.Scan() {
@@ -151,8 +154,8 @@ func runInteractiveMode(llm Llm, config Config) {
 			messages = ConvertToInterfaces(history)
 		}
 
-		// Print token usage and price if debug mode is enabled
-		if debugMode {
+		// Print token usage and price if NOT in quiet mode
+		if !config.Quiet {
 			switch provider := llm.(type) {
 			case *Claude:
 				price := provider.CalculatePrice()
@@ -166,7 +169,9 @@ func runInteractiveMode(llm Llm, config Config) {
 				fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
 			}
 		}
-		fmt.Println(strings.Repeat("━", 64))
+		if !config.Quiet {
+			fmt.Println(strings.Repeat("━", 64))
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -304,6 +309,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to load configuration: %v\n", err)
 	}
 
+	// Set config.Quiet to CLI flag if present
+	config.Quiet = config.Quiet || *quietFlag
+
 	// Initialize enabled tools
 	initializeTools(*toolsFlag, &config)
 
@@ -319,20 +327,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Check if quiet flag is set
-	if *quietFlag {
-		// Get the prompt from the remaining arguments
+	if config.Quiet {
 		args := flag.Args()
-		if len(args) == 0 {
-			fmt.Fprintf(os.Stderr, "Error: No prompt provided in simple mode\n")
-			fmt.Fprintf(os.Stderr, "Usage: %s -q \"your prompt here\"\n", os.Args[0])
-			os.Exit(1)
-		}
+		if len(args) != 0 {
+			prompt := strings.Join(args, " ")
+			runSimpleMode(prompt, llm, config)
+			return
 
-		// Join all arguments as the prompt
-		prompt := strings.Join(args, " ")
-		runSimpleMode(prompt, llm, config)
-		return
+		}
 	}
 
 	runInteractiveMode(llm, config)

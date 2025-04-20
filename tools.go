@@ -38,12 +38,10 @@ type GlobToolParams struct {
 	Path    string `json:"path,omitempty"`
 }
 
-
 type LsToolParams struct {
 	Path   string   `json:"path"`
 	Ignore []string `json:"ignore,omitempty"`
 }
-
 
 func parseToolParams[T any](paramsJSON json.RawMessage, simpleStringField string) (T, error) {
 	var params T
@@ -129,7 +127,6 @@ func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
 	result, _ := executeCommand(rgCmd)
 	return result, nil
 }
-
 
 type FetchToolParams struct {
 	URL     string            `json:"url"`
@@ -669,8 +666,6 @@ func ExecuteEditTool(paramsJSON json.RawMessage) (string, error) {
 	return fmt.Sprintf("Successfully edited file %s, replacing %d occurrence(s) of old_string with new_string.", params.FilePath, expectedReplacements), nil
 }
 
-
-
 // DispatchAgentToolParams represents the parameters for the dispatch_agent tool
 type DispatchAgentToolParams struct {
 	Prompt string `json:"prompt"`
@@ -720,4 +715,3 @@ func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
 	fmt.Printf("===\n")
 	return string(output), nil
 }
-

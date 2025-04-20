@@ -506,8 +506,8 @@ func NewOpenAI(config Config) *OpenAI {
 		apiKey:                apiKey,
 		InputTokens:           0,
 		OutputTokens:          0,
-		InputPricePerMillion:  0.5, // Approximate price for GPT-4 input tokens
-		OutputPricePerMillion: 1.5, // Approximate price for GPT-4 output tokens
+		InputPricePerMillion:  2, // Approximate price for GPT-4 input tokens
+		OutputPricePerMillion: 8, // Approximate price for GPT-4 output tokens
 		ContextWindowSize:     128000,
 	}
 }

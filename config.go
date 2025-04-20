@@ -18,6 +18,7 @@ type Config struct {
 	InitialPrompt  string   `yaml:"initial_prompt"`
 	NonInteractive bool     `yaml:"non_interactive"`
 	Debug          bool     `yaml:"debug"`
+	Quiet          bool     `yaml:"quiet"`
 	EnabledTools   []string `yaml:"enabled_tools"`
 }
 
