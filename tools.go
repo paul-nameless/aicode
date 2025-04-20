@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"time"
 )
 
 type toolCall struct {
@@ -39,16 +38,12 @@ type GlobToolParams struct {
 	Path    string `json:"path,omitempty"`
 }
 
+
 type LsToolParams struct {
 	Path   string   `json:"path"`
 	Ignore []string `json:"ignore,omitempty"`
 }
 
-type GrepResult struct {
-	FilePath string    `json:"file_path"`
-	Matches  []string  `json:"matches"`
-	ModTime  time.Time `json:"-"`
-}
 
 func parseToolParams[T any](paramsJSON json.RawMessage, simpleStringField string) (T, error) {
 	var params T

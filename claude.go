@@ -56,11 +56,6 @@ type claudeContentBlock struct {
 	Content   string          `json:"content,omitempty"`
 }
 
-type toolUseBlock struct {
-	ID    string          `json:"id"`
-	Name  string          `json:"name"`
-	Input json.RawMessage `json:"input"`
-}
 
 type claudeResponse struct {
 	ID         string               `json:"id"`

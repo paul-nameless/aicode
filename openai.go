@@ -119,19 +119,6 @@ func LoadOpenAIContext() error {
 	return nil
 }
 
-// ToolCallMessage represents a message with a tool call
-type ToolCallMessage struct {
-	Role      string     `json:"role"`
-	Content   string     `json:"content,omitempty"`
-	ToolCalls []toolCall `json:"tool_calls,omitempty"`
-}
-
-// ToolResultMessage represents a message with a tool result
-type ToolResultMessage struct {
-	Role       string `json:"role"`
-	ToolCallID string `json:"tool_call_id"`
-	Content    string `json:"content"`
-}
 
 // Inference implements the Llm interface for OpenAI
 func (o *OpenAI) Inference(messages []interface{}) (InferenceResponse, error) {
