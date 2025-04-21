@@ -82,6 +82,12 @@ func runSimpleMode(prompt string, llm Llm, config Config) {
 	}
 }
 
+// Custom message type for updating results asynchronously
+type updateResultMsg struct {
+	outputs []string
+	err     error
+}
+
 // Bubbletea model for interactive mode
 type chatModel struct {
 	textarea     textarea.Model
@@ -91,6 +97,7 @@ type chatModel struct {
 	scrollOffset int
 	windowHeight int
 	err          error
+	processing   bool
 }
 
 func initialChatModel(llm Llm, config Config) chatModel {
@@ -109,6 +116,7 @@ func initialChatModel(llm Llm, config Config) chatModel {
 		outputs:      outputs,
 		scrollOffset: 0,
 		windowHeight: 0,
+		processing:   false,
 	}
 }
 
@@ -116,8 +124,22 @@ func (m chatModel) Init() tea.Cmd {
 	return textarea.Blink
 }
 
+// Command to deliver an updateResultMsg message
+func deliverResult(msg updateResultMsg) tea.Cmd {
+	return func() tea.Msg {
+		return msg
+	}
+}
+
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case updateResultMsg:
+		// Handle the update from our async processing
+		m.outputs = msg.outputs
+		m.err = msg.err
+		m.processing = false
+		m.scrollOffset = 0
+		return m, nil
 	case tea.KeyMsg:
 		switch {
 		case msg.Type == tea.KeyEnter && msg.Alt:
@@ -127,6 +149,11 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyCtrlD:
 			return m, tea.Quit
 		case msg.Type == tea.KeyEnter:
+			// If we're already processing, ignore the input
+			if m.processing {
+				return m, nil
+			}
+
 			input := m.textarea.Value()
 			if input != "" {
 				trimmedInput := strings.TrimSpace(input)
@@ -155,42 +182,65 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.scrollOffset = 0
 					return m, nil
 				}
-				// Process input with conversation
+
+				// Mark as processing
+				m.processing = true
+				m.textarea.Reset()
+
+				// Add a processing message to the display
+				m.outputs = append(m.outputs, "> "+input)
+				m.outputs = append(m.outputs, "< Processing...")
+				m.scrollOffset = 0
+
+				// Store a copy of the model for the goroutine to use
+				llm := m.llm
+				config := m.config
+
+				// Get the prompt to process
 				prompt := input
 
-				for {
-					// Get response from LLM
-					inferenceResponse, err := m.llm.Inference(prompt)
-					if err != nil {
-						m.err = err
-						break
+				// Use a goroutine to process the request asynchronously
+				go func() {
+					var finalErr error
+
+					for {
+						// Get response from LLM
+						inferenceResponse, err := llm.Inference(prompt)
+						if err != nil {
+							finalErr = err
+							break
+						}
+
+						// Clear prompt for next iteration
+						prompt = ""
+
+						// Check if we have tool calls
+						if len(inferenceResponse.ToolCalls) == 0 {
+							break
+						}
+
+						// Process tool calls
+						_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls, config)
+						if err != nil {
+							finalErr = err
+							break
+						}
+
+						// Add tool results to LLM conversation history
+						for _, result := range toolResults {
+							llm.AddToolResult(result.CallID, result.Output)
+						}
 					}
 
-					// Clear prompt for next iteration
-					prompt = ""
-
-					// Check if we have tool calls
-					if len(inferenceResponse.ToolCalls) == 0 {
-						break
+					// Once processing is complete, update the UI via the global program reference
+					if programRef != nil {
+						programRef.Send(updateResultMsg{
+							outputs: llm.GetFormattedHistory(),
+							err:     finalErr,
+						})
 					}
+				}()
 
-					// Process tool calls
-					_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls, m.config)
-					if err != nil {
-						m.err = err
-						break
-					}
-
-					// Add tool results to LLM conversation history
-					for _, result := range toolResults {
-						m.llm.AddToolResult(result.CallID, result.Output)
-					}
-				}
-
-				// Update displays with conversation history
-				m.outputs = m.llm.GetFormattedHistory()
-				m.textarea.Reset()
-				m.scrollOffset = 0
 				return m, nil
 			}
 		case msg.String() == "up":
@@ -315,9 +365,22 @@ func (m chatModel) View() string {
 		view += line + "\n"
 	}
 	view += m.textarea.View()
+
+	// Show status information
+	statusInfo := ""
 	if maxScroll > 0 {
-		view += fmt.Sprintf("\n[Scroll: %d/%d]", scrollOffset, maxScroll)
+		statusInfo += fmt.Sprintf("[Scroll: %d/%d]", scrollOffset, maxScroll)
 	}
+	if m.processing {
+		if statusInfo != "" {
+			statusInfo += " "
+		}
+		statusInfo += "[Processing...]"
+	}
+	if statusInfo != "" {
+		view += fmt.Sprintf("\n%s", statusInfo)
+	}
+
 	if m.err != nil {
 		view += fmt.Sprintf("\nError: %v", m.err)
 	}
@@ -326,8 +389,12 @@ func (m chatModel) View() string {
 
 // This function was removed as each LLM now implements GetFormattedHistory()
 
+// Global reference to the running program, used for async updates
+var programRef *tea.Program
+
 func runInteractiveMode(llm Llm, config Config) {
 	p := tea.NewProgram(initialChatModel(llm, config), tea.WithAltScreen())
+	programRef = p
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
