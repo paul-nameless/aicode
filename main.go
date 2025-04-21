@@ -185,7 +185,7 @@ var debugMode bool
 
 // AllTools is a list of all available tools
 var AllTools = []string{
-	"GrepTool",
+	"Grep",
 	"GlobTool",
 	"FindFiles",
 	"Bash",
@@ -200,7 +200,7 @@ var AllTools = []string{
 // DefaultDispatchAgentTools is the list of tools available to DispatchAgent by default
 var DefaultDispatchAgentTools = []string{
 	"GlobTool",
-	"GrepTool",
+	"Grep",
 	"Ls",
 	"View",
 }

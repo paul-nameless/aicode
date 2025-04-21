@@ -59,15 +59,15 @@ func loadOpenAITools() ([]openaiTool, error) {
 		Schema      string
 		Description string
 	}{
-		"View":           {ViewToolSchema, ViewToolDescription},
-		"Replace":        {ReplaceToolSchema, ReplaceToolDescription},
-		"Edit":           {EditToolSchema, EditToolDescription},
-		"Bash":           {BashToolSchema, BashToolDescription},
-		"Ls":             {LsToolSchema, LsToolDescription},
-		"FindFiles":      {FindFilesSchema, FindFilesDescription},
+		"View":          {ViewToolSchema, ViewToolDescription},
+		"Replace":       {ReplaceToolSchema, ReplaceToolDescription},
+		"Edit":          {EditToolSchema, EditToolDescription},
+		"Bash":          {BashToolSchema, BashToolDescription},
+		"Ls":            {LsToolSchema, LsToolDescription},
+		"FindFiles":     {FindFilesSchema, FindFilesDescription},
 		"DispatchAgent": {DispatchAgentSchema, DispatchAgentDescription},
-		"Fetch":          {FetchToolSchema, FetchToolDescription},
-		"GrepTool":       {GrepToolSchema, GrepToolDescription},
+		"Fetch":         {FetchToolSchema, FetchToolDescription},
+		"Grep":          {GrepSchema, GrepDescription},
 	}
 
 	// Process each tool

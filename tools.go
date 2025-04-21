@@ -27,7 +27,7 @@ type toolCallFunction struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
-type GrepToolParams struct {
+type GrepParams struct {
 	Pattern string `json:"pattern"`
 	Path    string `json:"path,omitempty"`
 	Include string `json:"include,omitempty"`
@@ -86,8 +86,8 @@ func parseToolParams[T any](paramsJSON json.RawMessage, simpleStringField string
 	return params, nil
 }
 
-func ExecuteGrepTool(paramsJSON json.RawMessage) (string, error) {
-	params, err := parseToolParams[GrepToolParams](paramsJSON, "Pattern")
+func ExecuteGrep(paramsJSON json.RawMessage) (string, error) {
+	params, err := parseToolParams[GrepParams](paramsJSON, "Pattern")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse grep tool parameters: %v", err)
 	}
@@ -202,10 +202,10 @@ func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []
 		var err error
 
 		switch toolName {
-		case "GrepTool":
-			result, err = ExecuteGrepTool(toolCall.Input)
+		case "Grep":
+			result, err = ExecuteGrep(toolCall.Input)
 			if err != nil {
-				result = fmt.Sprintf("Error executing GrepTool: %v", err)
+				result = fmt.Sprintf("Error executing Grep: %v", err)
 			}
 		case "FindFiles":
 			result, err = ExecuteFindFiles(toolCall.Input)

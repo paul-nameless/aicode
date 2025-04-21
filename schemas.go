@@ -29,7 +29,7 @@ var DispatchAgentDescription string
 var FetchToolDescription string
 
 //go:embed tools/grep.md
-var GrepToolDescription string
+var GrepDescription string
 
 //go:embed tools/view.json
 var ViewToolSchema string
@@ -56,4 +56,4 @@ var DispatchAgentSchema string
 var FetchToolSchema string
 
 //go:embed tools/grep.json
-var GrepToolSchema string
+var GrepSchema string
