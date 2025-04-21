@@ -129,6 +129,32 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case msg.Type == tea.KeyEnter:
 			input := m.textarea.Value()
 			if input != "" {
+				trimmedInput := strings.TrimSpace(input)
+				if trimmedInput == "/clear" {
+					triggerMsg := "Command /clear triggered"
+					m.outputs = append(m.outputs, triggerMsg)
+					m.textarea.Reset()
+					m.scrollOffset = 0
+					return m, nil
+				} else if trimmedInput == "/cost" {
+					var price float64
+					var inputDisplay, outputDisplay string
+					switch provider := m.llm.(type) {
+					case *Claude:
+						price = provider.CalculatePrice()
+						inputDisplay = formatTokenCount(provider.InputTokens)
+						outputDisplay = formatTokenCount(provider.OutputTokens)
+					case *OpenAI:
+						price = provider.CalculatePrice()
+						inputDisplay = formatTokenCount(provider.InputTokens)
+						outputDisplay = formatTokenCount(provider.OutputTokens)
+					}
+					msg := fmt.Sprintf("Tokens: %s input, %s output. Cost: $%.2f", inputDisplay, outputDisplay, price)
+					m.outputs = append(m.outputs, msg)
+					m.textarea.Reset()
+					m.scrollOffset = 0
+					return m, nil
+				}
 				// Process input with conversation
 				prompt := input
 
