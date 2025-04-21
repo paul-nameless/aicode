@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -147,24 +148,23 @@ func (c *Claude) Inference(messages []interface{}) (InferenceResponse, error) {
 func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (InferenceResponse, error) {
 	// Check if we need to summarize the conversation
 	if c.shouldSummarizeConversation() || isRetry {
-		if debugMode {
-			fmt.Println("Context usage approaching limit. Summarizing conversation...")
-		}
+		slog.Debug("Context usage approaching limit. Summarizing conversation...")
 		beforeCount := len(conversationHistory)
 		beforeTokens := c.InputTokens
 
 		err := c.summarizeConversation(messages)
 		if err != nil {
-			if debugMode {
-				fmt.Printf("Warning: Failed to summarize conversation: %v\n", err)
-			}
-		} else if debugMode {
+			slog.Warn("Failed to summarize conversation", "error", err)
+		} else {
 			afterCount := len(conversationHistory)
 			afterTokens := c.InputTokens
 			reductionPercent := 100 - (float64(afterTokens) * 100 / float64(beforeTokens))
-			fmt.Printf("Conversation summarized: %d messages → %d messages (%.1f%% token reduction)\n",
-				beforeCount, afterCount, reductionPercent)
-			fmt.Printf("Token counts: %d → %d tokens\n", beforeTokens, afterTokens)
+			slog.Debug("Conversation summarized",
+				"beforeCount", beforeCount,
+				"afterCount", afterCount,
+				"reductionPercent", reductionPercent,
+				"beforeTokens", beforeTokens,
+				"afterTokens", afterTokens)
 		}
 
 		// Rebuild messages from updated conversation history
@@ -237,9 +237,7 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 
 	// Check for rate limit error (HTTP 429)
 	if resp.StatusCode == 429 && !isRetry {
-		if debugMode {
-			fmt.Println("Received rate limit (429) error. Summarizing conversation and retrying...")
-		}
+		slog.Debug("Received rate limit (429) error. Summarizing conversation and retrying...")
 		return c.inferenceWithRetry(messages, true)
 	}
 
@@ -252,12 +250,10 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 
 	if out.Error != nil {
 		// Check if the error is about rate limiting and we haven't retried yet
-		fmt.Printf("Inference error: url=%s, error=%s\n", url, out.Error.Message)
+		slog.Error("Inference error", "url", url, "error", out.Error.Message)
 		if (strings.Contains(strings.ToLower(out.Error.Message), "rate limit") ||
 			strings.Contains(strings.ToLower(out.Error.Message), "too many requests")) && !isRetry {
-			if debugMode {
-				fmt.Println("Received rate limit error in response. Summarizing conversation and retrying...")
-			}
+			slog.Debug("Received rate limit error in response. Summarizing conversation and retrying...")
 			return c.inferenceWithRetry(messages, true)
 		}
 		return InferenceResponse{}, errors.New(out.Error.Message)
@@ -403,7 +399,7 @@ func (c *Claude) summarizeConversation(messages []interface{}) error {
 		return nil
 	}
 
-	fmt.Println("Summarizing conversation...")
+	slog.Debug("Summarizing conversation...")
 
 	lastMessages := conversationHistory[len(conversationHistory)-2:]
 
@@ -575,9 +571,12 @@ func (c *Claude) summarizeConversation(messages []interface{}) error {
 	charsBefore := inputTokensBefore * 4
 	charsAfter := summaryLength
 
-	fmt.Printf("Summarized conversation: ~%d tokens → ~%d tokens (%.1f%% reduction)\n",
-		inputTokensBefore, inputTokensAfter, tokenReduction)
-	fmt.Printf("Characters estimate: ~%d chars → ~%d chars\n", charsBefore, charsAfter)
+	slog.Debug("Summarized conversation",
+		"inputTokensBefore", inputTokensBefore,
+		"inputTokensAfter", inputTokensAfter,
+		"tokenReduction", tokenReduction,
+		"charsBefore", charsBefore,
+		"charsAfter", charsAfter)
 
 	// Reset the token counter since we've summarized the conversation
 	c.InputTokens = 0

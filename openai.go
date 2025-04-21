@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -129,23 +130,21 @@ func (o *OpenAI) Inference(messages []interface{}) (InferenceResponse, error) {
 func (o *OpenAI) inferenceWithRetry(messages []interface{}, isRetry bool) (InferenceResponse, error) {
 	// Check if we need to summarize the conversation
 	if o.shouldSummarizeConversation() || isRetry {
-		if debugMode {
-			fmt.Println("Context usage approaching limit. Summarizing conversation...")
-		}
+		slog.Debug("Context usage approaching limit. Summarizing conversation...")
 		beforeCount := len(conversationHistory)
 		beforeTokens := o.InputTokens
 
 		err := o.summarizeConversation(messages)
 		if err != nil {
-			if debugMode {
-				fmt.Printf("Warning: Failed to summarize conversation: %v\n", err)
-			}
-		} else if debugMode {
+			slog.Warn("Failed to summarize conversation", "error", err)
+		} else {
 			afterCount := len(conversationHistory)
 			afterTokens := o.InputTokens
 			reductionPercent := 100 - (float64(afterTokens) * 100 / float64(beforeTokens))
-			fmt.Printf("Conversation summarized: %d messages → %d messages (%.1f%% token reduction)\n",
-				beforeCount, afterCount, reductionPercent)
+			slog.Debug("Conversation summarized",
+				"beforeCount", beforeCount,
+				"afterCount", afterCount,
+				"reductionPercent", reductionPercent)
 		}
 
 		// Rebuild messages from updated conversation history
@@ -184,21 +183,17 @@ func (o *OpenAI) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 
 	// Check for rate limit error (HTTP 429)
 	if resp.StatusCode == 429 && !isRetry {
-		if debugMode {
-			fmt.Println("Received rate limit (429) error. Summarizing conversation and retrying...")
-		}
+		slog.Debug("Received rate limit (429) error. Summarizing conversation and retrying...")
 		return o.inferenceWithRetry(messages, true)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
 
 	// Debug output
-	if debugMode {
-		if len(body) > 200 {
-			fmt.Printf("OpenAI response (first 200 chars): %s...\n", string(body[:200]))
-		} else {
-			fmt.Printf("OpenAI response: %s\n", string(body))
-		}
+	if len(body) > 200 {
+		slog.Debug("OpenAI response (truncated)", "response", string(body[:200]))
+	} else {
+		slog.Debug("OpenAI response", "response", string(body))
 	}
 
 	var out openaiResponse
@@ -207,12 +202,10 @@ func (o *OpenAI) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 	}
 	if out.Error != nil {
 		// Check if the error is about rate limiting and we haven't retried yet
-		fmt.Printf("Inference error: url=%s, error=%s\n", url, out.Error.Message)
+		slog.Error("Inference error", "url", url, "error", out.Error.Message)
 		if (strings.Contains(strings.ToLower(out.Error.Message), "rate limit") ||
 			strings.Contains(strings.ToLower(out.Error.Message), "too many requests")) && !isRetry {
-			if debugMode {
-				fmt.Println("Received rate limit error in response. Summarizing conversation and retrying...")
-			}
+			slog.Debug("Received rate limit error in response. Summarizing conversation and retrying...")
 			return o.inferenceWithRetry(messages, true)
 		}
 		return InferenceResponse{}, errors.New(out.Error.Message)

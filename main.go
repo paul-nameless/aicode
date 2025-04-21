@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -54,7 +55,7 @@ func runSimpleMode(prompt string, llm Llm, config Config) {
 		// Process tool calls
 		_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls, config)
 		if err != nil {
-			if debugMode {
+			if config.Debug {
 				fmt.Fprintf(os.Stderr, "Error handling tool calls: %v\n", err)
 			}
 			break
@@ -110,11 +111,12 @@ func initialChatModel(llm Llm, config Config) chatModel {
 	ta.CharLimit = 0
 	ta.ShowLineNumbers = false
 	ta.SetHeight(4)
+	outputs := getAllConversationContents(config)
 	return chatModel{
 		textarea:     ta,
 		llm:          llm,
 		config:       config,
-		outputs:      []string{},
+		outputs:      outputs,
 		scrollOffset: 0,
 		windowHeight: 0,
 	}
@@ -162,7 +164,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					messages = ConvertToInterfaces(history)
 				}
 				// Add all conversation content to outputs
-				m.outputs = getAllConversationContents()
+				m.outputs = getAllConversationContents(m.config)
 				m.textarea.Reset()
 				m.scrollOffset = 0
 				return m, nil
@@ -299,9 +301,10 @@ func (m chatModel) View() string {
 }
 
 // getAllConversationContents returns all conversation messages' content as strings
-func getAllConversationContents() []string {
+func getAllConversationContents(config Config) []string {
 	history := GetConversationHistory()
 	var outputs []string
+	outputs = append(outputs, fmt.Sprintf("Model: %s", config.Model))
 	for _, msg := range history {
 		role := msg.Role
 		if role == "user" {
@@ -326,18 +329,12 @@ func getAllConversationContents() []string {
 }
 
 func runInteractiveMode(llm Llm, config Config) {
-	if !config.Quiet {
-		fmt.Printf("Model: %s\n", config.Model)
-	}
 	p := tea.NewProgram(initialChatModel(llm, config), tea.WithAltScreen())
-	if err := p.Start(); err != nil {
+	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
-
-// Global debug flag
-var debugMode bool
 
 // AllTools is a list of all available tools
 var AllTools = []string{
@@ -364,9 +361,6 @@ var DefaultDispatchAgentTools = []string{
 // initLLM initializes the appropriate LLM provider based on configuration
 func initLLM(config Config) (Llm, error) {
 	var llm Llm
-
-	// Set global debug flag
-	debugMode = config.Debug
 
 	// Choose provider based on configuration or available API keys
 	if strings.HasPrefix(config.Model, "claude") || os.Getenv("ANTHROPIC_API_KEY") != "" {
@@ -456,6 +450,7 @@ func main() {
 	nonInteractiveFlag := flag.Bool("n", false, "Run in non-interactive mode")
 	configFlag := flag.String("p", "~/.config/aicode/config.yml", "Profile/config file")
 	toolsFlag := flag.String("tools", "", "Comma-separated list of tools to enable (default: all tools)")
+	debugFlag := flag.Bool("d", false, "Enable debug logging")
 	flag.Parse()
 
 	configPath := expandHomeDir(*configFlag)
@@ -463,25 +458,44 @@ func main() {
 	// Load configuration
 	config, err := LoadConfig(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to load configuration: %v\n", err)
+		slog.Warn("Failed to load configuration", "error", err)
 	}
 
 	// Set config.Quiet to CLI flag if present
 	config.Quiet = config.Quiet || *quietFlag
+	config.Debug = config.Debug || *debugFlag
 	config.NonInteractive = config.NonInteractive || *nonInteractiveFlag
+
+	// Setup logging to file using slog
+	f, err := os.OpenFile("aicode.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	handler := slog.NewTextHandler(f, &slog.HandlerOptions{
+		Level: func() slog.Level {
+			if config.Debug {
+				return slog.LevelDebug
+			}
+			return slog.LevelInfo
+		}(),
+	})
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+	slog.Info("AiCode started", "version", "0.1")
 
 	// Initialize enabled tools
 	initializeTools(*toolsFlag, &config)
 
 	// Initialize context and load system prompts
 	if err := InitContext(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize context: %v\n", err)
+		slog.Warn("Failed to initialize context", "error", err)
 	}
 
 	// Initialize LLM provider with configuration
 	llm, err := initLLM(config)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize LLM provider: %v\n", err)
+		slog.Error("Failed to initialize LLM provider", "error", err)
 		os.Exit(1)
 	}
 
@@ -498,5 +512,4 @@ func main() {
 	}
 
 	runInteractiveMode(llm, config)
-
 }

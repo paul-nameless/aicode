@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -66,7 +67,7 @@ func parseToolParams[T any](paramsJSON json.RawMessage, simpleStringField string
 				}
 			} else if simpleStringField != "" {
 				// It's a simple string, set it to the specified field
-				fmt.Printf("DEBUG - Treating as simple value for field %s: %s\n", simpleStringField, strArg)
+				slog.Debug("Treating as simple value for field", "field", simpleStringField, "value", strArg)
 
 				// Use reflection to set the field
 				v := reflect.ValueOf(&params).Elem()
@@ -165,26 +166,16 @@ func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []
 	for _, toolCall := range toolCalls {
 		toolName := toolCall.Name
 
-		fmt.Printf("tool: %s(%s)\n", toolName, string(toolCall.Input))
-		// Only print tool information if debug mode is enabled
-		// if debugMode {
-		// 	fmt.Printf("tool: %s(%s)\n", toolName, string(toolCall.Input))
-		// }
+		slog.Debug("Tool call", "tool", toolName, "input", string(toolCall.Input))
 
 		// Get the global config to check enabled tools
 		// Check if the tool is enabled
 		toolEnabled := false
-		if debugMode {
-			// In debug mode, access global config directly for tools
-			for _, enabledTool := range config.EnabledTools {
-				if enabledTool == toolName {
-					toolEnabled = true
-					break
-				}
+		for _, enabledTool := range config.EnabledTools {
+			if enabledTool == toolName {
+				toolEnabled = true
+				break
 			}
-		} else {
-			// Not in debug mode, assume all tools are enabled
-			toolEnabled = true
 		}
 
 		if !toolEnabled {
@@ -264,9 +255,7 @@ func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []
 	}
 
 	// Only print debugging info if debug mode is enabled
-	if debugMode {
-		fmt.Println(toolResponse.String())
-	}
+	slog.Debug("Tool response", "response", toolResponse.String())
 
 	return toolResponse.String(), results, nil
 }
@@ -711,7 +700,7 @@ func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
 	}
 
 	// Return the output (which should be just the response in quiet mode)
-	fmt.Printf("Simulacrum output:\n%s\n", string(output))
-	fmt.Printf("===\n")
+	slog.Debug("Simulacrum output", "output", string(output))
+	slog.Debug("===")
 	return string(output), nil
 }
