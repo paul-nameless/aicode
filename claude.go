@@ -164,6 +164,7 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 			reductionPercent := 100 - (float64(afterTokens) * 100 / float64(beforeTokens))
 			fmt.Printf("Conversation summarized: %d messages → %d messages (%.1f%% token reduction)\n",
 				beforeCount, afterCount, reductionPercent)
+			fmt.Printf("Token counts: %d → %d tokens\n", beforeTokens, afterTokens)
 		}
 
 		// Rebuild messages from updated conversation history
@@ -402,6 +403,8 @@ func (c *Claude) summarizeConversation(messages []interface{}) error {
 		return nil
 	}
 
+	fmt.Println("Summarizing conversation...")
+
 	lastMessages := conversationHistory[len(conversationHistory)-2:]
 
 	// Convert messages to Claude format for the summarization request
@@ -529,6 +532,52 @@ func (c *Claude) summarizeConversation(messages []interface{}) error {
 	if len(lastMessages) != 0 {
 		conversationHistory = append(conversationHistory, lastMessages...)
 	}
+
+	// Calculate token stats before reset
+	inputTokensBefore := c.InputTokens
+
+	// We need to estimate the size of the new conversation history
+	// A simple approach is to count characters and divide by 4 (approximation)
+	var summaryLength int
+	for _, msg := range conversationHistory {
+		// Handle string content
+		if contentStr, ok := msg.Content.(string); ok {
+			summaryLength += len(contentStr)
+			continue
+		}
+
+		// Handle array of content blocks
+		if contentBlocks, ok := msg.Content.([]ContentBlock); ok {
+			for _, block := range contentBlocks {
+				if block.Type == "text" {
+					summaryLength += len(block.Text)
+				} else if block.Type == "tool_result" {
+					summaryLength += len(block.Content)
+				} else if block.Type == "tool_use" {
+					// Add estimated size for tool use blocks
+					summaryLength += 100 // Rough estimate for tool metadata
+					inputBytes, _ := block.Input.MarshalJSON()
+					summaryLength += len(string(inputBytes))
+				}
+			}
+		}
+	}
+
+	// Estimate tokens after summarization (roughly 4 characters per token)
+	// Use float division for more accurate token estimation, then convert to int
+	inputTokensAfter := int(float64(summaryLength) / 4.0)
+	tokenReduction := 100.0
+	if inputTokensAfter > 0 && inputTokensBefore > 0 {
+		tokenReduction = 100 - (float64(inputTokensAfter) * 100 / float64(inputTokensBefore))
+	}
+
+	// Estimate character counts
+	charsBefore := inputTokensBefore * 4
+	charsAfter := summaryLength
+
+	fmt.Printf("Summarized conversation: ~%d tokens → ~%d tokens (%.1f%% reduction)\n",
+		inputTokensBefore, inputTokensAfter, tokenReduction)
+	fmt.Printf("Characters estimate: ~%d chars → ~%d chars\n", charsBefore, charsAfter)
 
 	// Reset the token counter since we've summarized the conversation
 	c.InputTokens = 0
