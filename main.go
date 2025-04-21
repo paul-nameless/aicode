@@ -57,9 +57,9 @@ func runSimpleMode(prompt string, llm Llm, config Config) {
 		for _, result := range toolResults {
 			llm.AddToolResult(result.CallID, result.Output)
 		}
-        
-        // Clear prompt for next iteration - we'll continue from conversation history
-        prompt = ""
+
+		// Clear prompt for next iteration - we'll continue from conversation history
+		prompt = ""
 	}
 
 	// In quiet mode, only print the final response content
@@ -131,7 +131,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if input != "" {
 				// Process input with conversation
 				prompt := input
-				
+
 				for {
 					// Get response from LLM
 					inferenceResponse, err := m.llm.Inference(prompt)
@@ -139,28 +139,28 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.err = err
 						break
 					}
-					
+
 					// Clear prompt for next iteration
 					prompt = ""
-					
+
 					// Check if we have tool calls
 					if len(inferenceResponse.ToolCalls) == 0 {
 						break
 					}
-					
+
 					// Process tool calls
 					_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls, m.config)
 					if err != nil {
 						m.err = err
 						break
 					}
-					
+
 					// Add tool results to LLM conversation history
 					for _, result := range toolResults {
 						m.llm.AddToolResult(result.CallID, result.Output)
 					}
 				}
-				
+
 				// Update displays with conversation history
 				m.outputs = m.llm.GetFormattedHistory()
 				m.textarea.Reset()
@@ -465,7 +465,7 @@ func main() {
 		slog.Error("Failed to initialize LLM provider", "error", err)
 		os.Exit(1)
 	}
-	
+
 	// Initialize context and load system prompts
 	if err := InitContext(llm); err != nil {
 		slog.Warn("Failed to initialize context", "error", err)

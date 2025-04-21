@@ -343,6 +343,10 @@ type Claude struct {
 	systemMessages        []claudeSystemMessage
 }
 
+func (c *Claude) Clear() {
+	c.conversationHistory = make([]claudeMessage, 0)
+}
+
 // shouldSummarizeConversation checks if the conversation needs to be summarized
 // based on the actual token usage compared to the context window size
 func (c *Claude) shouldSummarizeConversation() bool {
@@ -474,7 +478,7 @@ func (c *Claude) summarizeConversation() error {
 	// Check if last message is a tool result that needs its corresponding tool call
 	toolCallNeeded := false
 	var toolUseID string
-	
+
 	// If we have at least 1 message and it's a user message
 	if len(lastMessages) > 0 && lastMessages[len(lastMessages)-1].Role == "user" {
 		// Check if it's a tool result message

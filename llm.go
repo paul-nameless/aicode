@@ -25,13 +25,15 @@ type Llm interface {
 	// AddMessage adds a message to the conversation history
 	AddMessage(content string, role string)
 	// AddToolResult adds a tool result to the conversation history
-	AddToolResult(toolUseID string, result string) 
+	AddToolResult(toolUseID string, result string)
 	// GetFormattedHistory returns the conversation history formatted for display
 	GetFormattedHistory() []string
 	// Init initializes the LLM provider with configuration
 	Init(config Config) error
 	// CalculatePrice calculates the total cost of the conversation
 	CalculatePrice() float64
+	// Clear clears the conversation history and preserves the system prompt
+	Clear()
 }
 
 // ContentBlock represents a block of content in a message (text or tool related)

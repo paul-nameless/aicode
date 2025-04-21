@@ -383,6 +383,10 @@ type OpenAI struct {
 	conversationHistory   []openaiMessage // Internal conversation history
 }
 
+func (o *OpenAI) Clear() {
+	o.conversationHistory = make([]openaiMessage, 0)
+}
+
 // shouldSummarizeConversation checks if the conversation needs to be summarized
 // based on the actual token usage compared to the context window size
 func (o *OpenAI) shouldSummarizeConversation() bool {
@@ -481,7 +485,7 @@ func (o *OpenAI) summarizeConversation() error {
 	// Check if the last message is a tool response that needs its corresponding tool call
 	toolCallNeeded := false
 	var toolCallID string
-	
+
 	// If we have at least 1 message and it's a tool message
 	if len(lastMessages) > 0 && lastMessages[len(lastMessages)-1].Role == "tool" {
 		// Check if it's a tool result message
