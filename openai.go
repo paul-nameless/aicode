@@ -478,6 +478,39 @@ func (o *OpenAI) summarizeConversation() error {
 		},
 	}
 
+	// Check if the last message is a tool response that needs its corresponding tool call
+	toolCallNeeded := false
+	var toolCallID string
+	
+	// If we have at least 1 message and it's a tool message
+	if len(lastMessages) > 0 && lastMessages[len(lastMessages)-1].Role == "tool" {
+		// Check if it's a tool result message
+		if lastMessages[len(lastMessages)-1].Type == "tool_result" {
+			toolCallNeeded = true
+			toolCallID = lastMessages[len(lastMessages)-1].ToolCallID
+		}
+	}
+
+	// If we need to find a matching tool call, look through history
+	if toolCallNeeded {
+		// Find the corresponding assistant message with the tool call
+		for i := len(o.conversationHistory) - 3; i >= 0; i-- {
+			if o.conversationHistory[i].Role == "assistant" && len(o.conversationHistory[i].ToolCalls) > 0 {
+				for _, toolCall := range o.conversationHistory[i].ToolCalls {
+					if toolCall.ID == toolCallID {
+						// Found the matching tool call, include it in preserved messages
+						lastMessages = append([]openaiMessage{o.conversationHistory[i]}, lastMessages...)
+						break
+					}
+				}
+			}
+			// Once we found the tool call, stop searching
+			if len(lastMessages) > 2 {
+				break
+			}
+		}
+	}
+
 	// Add back the most recent messages
 	newHistory = append(newHistory, lastMessages...)
 	o.conversationHistory = newHistory

@@ -471,6 +471,45 @@ func (c *Claude) summarizeConversation() error {
 		},
 	}
 
+	// Check if last message is a tool result that needs its corresponding tool call
+	toolCallNeeded := false
+	var toolUseID string
+	
+	// If we have at least 1 message and it's a user message
+	if len(lastMessages) > 0 && lastMessages[len(lastMessages)-1].Role == "user" {
+		// Check if it's a tool result message
+		if blocks, ok := lastMessages[len(lastMessages)-1].Content.([]claudeContentBlock); ok {
+			for _, block := range blocks {
+				if block.Type == "tool_result" {
+					toolCallNeeded = true
+					toolUseID = block.ToolUseID
+				}
+			}
+		}
+	}
+
+	// If we need to find a matching tool call, look through history
+	if toolCallNeeded {
+		// Find the corresponding tool call
+		for i := len(c.conversationHistory) - 3; i >= 0; i-- {
+			if c.conversationHistory[i].Role == "assistant" {
+				if blocks, ok := c.conversationHistory[i].Content.([]claudeContentBlock); ok {
+					for _, block := range blocks {
+						if block.Type == "tool_use" && block.ID == toolUseID {
+							// Found the matching tool call, include it in preserved messages
+							lastMessages = append([]claudeMessage{c.conversationHistory[i]}, lastMessages...)
+							break
+						}
+					}
+				}
+			}
+			// Once we found the tool call, stop searching
+			if len(lastMessages) > 2 {
+				break
+			}
+		}
+	}
+
 	// Add back the last messages
 	newConversation = append(newConversation, lastMessages...)
 	c.conversationHistory = newConversation
