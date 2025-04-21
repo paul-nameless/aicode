@@ -428,7 +428,7 @@ func initLLM(config Config) (Llm, error) {
 	var llm Llm
 
 	// Choose provider based on configuration or available API keys
-	if strings.HasPrefix(config.Model, "claude") || os.Getenv("ANTHROPIC_API_KEY") != "" {
+	if os.Getenv("ANTHROPIC_API_KEY") != "" || strings.HasPrefix(config.Model, "claude") {
 		llm = NewClaude(config)
 	} else {
 		llm = NewOpenAI(config)
