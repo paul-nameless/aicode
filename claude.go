@@ -98,7 +98,7 @@ func loadClaudeTools() ([]claudeTool, error) {
 		"Bash":           {BashToolSchema, BashToolDescription},
 		"Ls":             {LsToolSchema, LsToolDescription},
 		"FindFiles":      {FindFilesSchema, FindFilesDescription},
-		"dispatch_agent": {DispatchAgentSchema, DispatchAgentDescription},
+		"DispatchAgent": {DispatchAgentSchema, DispatchAgentDescription},
 		"Fetch":          {FetchToolSchema, FetchToolDescription},
 		"GrepTool":       {GrepToolSchema, GrepToolDescription},
 	}

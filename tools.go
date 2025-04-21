@@ -242,10 +242,10 @@ func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []
 			if err != nil {
 				result = fmt.Sprintf("Error executing Fetch: %v", err)
 			}
-		case "dispatch_agent":
+		case "DispatchAgent":
 			result, err = ExecuteDispatchAgentTool(toolCall.Input)
 			if err != nil {
-				result = fmt.Sprintf("Error executing dispatch_agent: %v", err)
+				result = fmt.Sprintf("Error executing DispatchAgent: %v", err)
 			}
 		default:
 			// For now, other tools aren't implemented yet
@@ -666,7 +666,7 @@ func ExecuteEditTool(paramsJSON json.RawMessage) (string, error) {
 	return fmt.Sprintf("Successfully edited file %s, replacing %d occurrence(s) of old_string with new_string.", params.FilePath, expectedReplacements), nil
 }
 
-// DispatchAgentToolParams represents the parameters for the dispatch_agent tool
+// DispatchAgentToolParams represents the parameters for the DispatchAgent tool
 type DispatchAgentToolParams struct {
 	Prompt string `json:"prompt"`
 }
@@ -676,7 +676,7 @@ type DispatchAgentToolParams struct {
 func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
 	params, err := parseToolParams[DispatchAgentToolParams](paramsJSON, "Prompt")
 	if err != nil {
-		return "", fmt.Errorf("failed to parse dispatch_agent tool parameters: %v", err)
+		return "", fmt.Errorf("failed to parse DispatchAgent tool parameters: %v", err)
 	}
 
 	// Validate parameters

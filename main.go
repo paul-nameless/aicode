@@ -194,10 +194,10 @@ var AllTools = []string{
 	"Edit",
 	"Replace",
 	"Fetch",
-	"dispatch_agent",
+	"DispatchAgent",
 }
 
-// DefaultDispatchAgentTools is the list of tools available to dispatch_agent by default
+// DefaultDispatchAgentTools is the list of tools available to DispatchAgent by default
 var DefaultDispatchAgentTools = []string{
 	"GlobTool",
 	"GrepTool",
