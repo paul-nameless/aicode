@@ -188,6 +188,13 @@ func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []
 			continue
 		}
 
+		paramsStr := string(toolCall.Input)
+		if len(paramsStr) > 64 {
+			paramsStr = paramsStr[:61] + "..."
+		}
+
+		programRef.Send(toolExecutingMsg{toolName: toolName, params: paramsStr})
+
 		// Execute the tool based on the name
 		var result string
 		var err error
@@ -320,25 +327,6 @@ func ExecuteFindFiles(paramsJSON json.RawMessage) (string, error) {
 	}
 
 	return result, nil
-
-	// 	// Split the result into lines
-	// 	lines := strings.Split(strings.TrimSpace(result), "\n")
-
-	// 	var sb strings.Builder
-	// 	sb.WriteString(fmt.Sprintf("Found %d files matching pattern '%s':\n\n", len(lines), params.Pattern))
-
-	// 	// Limit the number of files to display
-	// 	maxFilesToShow := 100
-	// 	for i, line := range lines {
-	// 		if i >= maxFilesToShow {
-	// 			remaining := len(lines) - maxFilesToShow
-	// 			sb.WriteString(fmt.Sprintf("\n... and %d more files not shown\n", remaining))
-	// 			break
-	// 		}
-	// 		sb.WriteString(fmt.Sprintf("%s\n", line))
-	// 	}
-
-	// return sb.String(), nil
 }
 
 // ExecuteLsTool lists files and directories in a given path using the shell ls command

@@ -82,10 +82,16 @@ func runSimpleMode(prompt string, llm Llm, config Config) {
 	}
 }
 
-// Custom message type for updating results asynchronously
+// Custom message types for updating results asynchronously
 type updateResultMsg struct {
 	outputs []string
 	err     error
+}
+
+// Message for tool execution status updates
+type toolExecutingMsg struct {
+	toolName string
+	params   string
 }
 
 // Bubbletea model for interactive mode
@@ -128,6 +134,9 @@ func (m chatModel) Init() tea.Cmd {
 
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case toolExecutingMsg:
+		m.outputs = append(m.outputs, fmt.Sprintf("%s(%s)", msg.toolName, msg.params))
+		return m, nil
 	case updateResultMsg:
 		// Handle the update from our async processing
 		m.outputs = msg.outputs
@@ -184,7 +193,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				// Add a processing message to the display
 				m.outputs = append(m.outputs, "> "+input)
-				m.outputs = append(m.outputs, "< Processing...")
+				m.outputs = append(m.outputs, "Thinking...")
 				m.scrollOffset = 0
 
 				// Store a copy of the model for the goroutine to use
@@ -364,12 +373,6 @@ func (m chatModel) View() string {
 	if maxScroll > 0 {
 		statusInfo += fmt.Sprintf("[Scroll: %d/%d]", scrollOffset, maxScroll)
 	}
-	if m.processing {
-		if statusInfo != "" {
-			statusInfo += " "
-		}
-		statusInfo += "[Processing...]"
-	}
 	if statusInfo != "" {
 		view += fmt.Sprintf("\n%s", statusInfo)
 	}
@@ -384,6 +387,8 @@ func (m chatModel) View() string {
 
 // Global reference to the running program, used for async updates
 var programRef *tea.Program
+
+// Channel for receiving tool execution updates
 
 func runInteractiveMode(llm Llm, config Config) {
 	p := tea.NewProgram(initialChatModel(llm, config), tea.WithAltScreen())

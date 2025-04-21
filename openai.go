@@ -474,22 +474,22 @@ func (o *OpenAI) GetFormattedHistory() []string {
 	outputs = append(outputs, fmt.Sprintf("Model: %s", o.Model))
 
 	for _, msg := range o.conversationHistory {
-		role := msg.Role
-		if role == "system" {
+		role := msg.Role + ": "
+		if role == "system" || msg.Content == "" {
 			continue
 		}
 		if role == "user" {
-			role = ">"
+			role = "> "
 		} else if role == "assistant" {
-			role = "<"
+			role = ""
 		} else if role == "tool" {
-			role = "T"
+			continue
 		}
 
 		if msg.Type == "tool_result" {
-			outputs = append(outputs, fmt.Sprintf("%s %s", role, msg.Content))
+			outputs = append(outputs, fmt.Sprintf("%s%s", role, msg.Content))
 		} else if msg.Type == "text" || msg.Type == "" {
-			outputs = append(outputs, fmt.Sprintf("%s %s", role, msg.Content))
+			outputs = append(outputs, fmt.Sprintf("%s%s", role, msg.Content))
 		}
 	}
 
