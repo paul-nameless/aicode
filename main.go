@@ -1,13 +1,15 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
+
+	"github.com/charmbracelet/bubbles/textarea"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // formatTokenCount converts token counts to a more readable format
@@ -89,93 +91,247 @@ func runSimpleMode(prompt string, llm Llm, config Config) {
 	}
 }
 
-// runInteractiveMode reads user input in a loop until Ctrl+C/D
+// Bubbletea model for interactive mode
+type chatModel struct {
+	textarea     textarea.Model
+	llm          Llm
+	config       Config
+	outputs      []string
+	scrollOffset int
+	windowHeight int
+	err          error
+}
+
+func initialChatModel(llm Llm, config Config) chatModel {
+	ta := textarea.New()
+	ta.Placeholder = "Ask anything..."
+	ta.Focus()
+	ta.Prompt = "┃ "
+	ta.CharLimit = 0
+	ta.ShowLineNumbers = false
+	ta.SetHeight(4)
+	return chatModel{
+		textarea:     ta,
+		llm:          llm,
+		config:       config,
+		outputs:      []string{},
+		scrollOffset: 0,
+		windowHeight: 0,
+	}
+}
+
+func (m chatModel) Init() tea.Cmd {
+	return textarea.Blink
+}
+
+func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch {
+		case msg.Type == tea.KeyEnter && msg.Alt:
+			// Insert newline on Alt+Enter
+			m.textarea.InsertString("\n")
+			return m, nil
+		case msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyCtrlD:
+			return m, tea.Quit
+		case msg.Type == tea.KeyEnter:
+			input := m.textarea.Value()
+			if input != "" {
+				// Send to LLM and get response
+				UpdateConversationHistoryText(input, "user")
+				history := GetConversationHistory()
+				messages := ConvertToInterfaces(history)
+				for {
+					inferenceResponse, err := m.llm.Inference(messages)
+					if err != nil {
+						m.err = err
+						break
+					}
+					if len(inferenceResponse.ToolCalls) == 0 {
+						break
+					}
+					_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls, m.config)
+					if err != nil {
+						m.err = err
+						break
+					}
+					for _, result := range toolResults {
+						AddToolResultToHistory(result.CallID, result.Output)
+					}
+					history = GetConversationHistory()
+					messages = ConvertToInterfaces(history)
+				}
+				// Add all conversation content to outputs
+				m.outputs = getAllConversationContents()
+				m.textarea.Reset()
+				m.scrollOffset = 0
+				return m, nil
+			}
+		case msg.String() == "up":
+			maxScroll := m.getMaxScroll()
+			if m.scrollOffset < maxScroll {
+				m.scrollOffset++
+			}
+			return m, nil
+		case msg.String() == "down":
+			if m.scrollOffset > 0 {
+				m.scrollOffset--
+			}
+			return m, nil
+		case msg.String() == "pgup":
+			maxScroll := m.getMaxScroll()
+			if m.scrollOffset+5 < maxScroll {
+				m.scrollOffset += 5
+			} else {
+				m.scrollOffset = maxScroll
+			}
+			return m, nil
+		case msg.String() == "pgdown":
+			if m.scrollOffset-5 > 0 {
+				m.scrollOffset -= 5
+			} else {
+				m.scrollOffset = 0
+			}
+			return m, nil
+		case (msg.Type == tea.KeyCtrlD):
+			if m.scrollOffset-10 > 0 {
+				m.scrollOffset -= 10
+			} else {
+				m.scrollOffset = 0
+			}
+			return m, nil
+		case (msg.Type == tea.KeyCtrlU):
+			maxScroll := m.getMaxScroll()
+			if m.scrollOffset+10 < maxScroll {
+				m.scrollOffset += 10
+			} else {
+				m.scrollOffset = maxScroll
+			}
+			return m, nil
+		}
+	case tea.WindowSizeMsg:
+		m.textarea.SetWidth(msg.Width - 4)
+		m.windowHeight = msg.Height
+	}
+	var cmd tea.Cmd
+	m.textarea, cmd = m.textarea.Update(msg)
+	return m, cmd
+}
+
+func (m chatModel) getMaxScroll() int {
+	lines := m.getOutputLines()
+	usableHeight := m.getHistoryHeight()
+	if len(lines) > usableHeight {
+		return len(lines) - usableHeight
+	}
+	return 0
+}
+
+func (m chatModel) getOutputLines() []string {
+	var lines []string
+	for _, output := range m.outputs {
+		entry := fmt.Sprintf("%s\n", output)
+		for _, line := range splitLines(entry) {
+			lines = append(lines, line)
+		}
+		lines = append(lines, "")
+	}
+	return lines
+}
+
+func (m chatModel) getHistoryHeight() int {
+	taLines := m.textarea.LineCount() + 2
+	if m.windowHeight > taLines+1 {
+		return m.windowHeight - taLines - 1
+	}
+	return 0
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i, c := range s {
+		if c == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}
+
+func (m chatModel) View() string {
+	var view string
+	lines := m.getOutputLines()
+	historyHeight := m.getHistoryHeight()
+	maxScroll := m.getMaxScroll()
+	scrollOffset := m.scrollOffset
+	if scrollOffset > maxScroll {
+		scrollOffset = maxScroll
+	}
+	if scrollOffset < 0 {
+		scrollOffset = 0
+	}
+	start := 0
+	if len(lines) > historyHeight {
+		start = len(lines) - historyHeight - scrollOffset
+		if start < 0 {
+			start = 0
+		}
+	}
+	end := start + historyHeight
+	if end > len(lines) {
+		end = len(lines)
+	}
+	for _, line := range lines[start:end] {
+		view += line + "\n"
+	}
+	view += m.textarea.View()
+	if maxScroll > 0 {
+		view += fmt.Sprintf("\n[Scroll: %d/%d]", scrollOffset, maxScroll)
+	}
+	if m.err != nil {
+		view += fmt.Sprintf("\nError: %v", m.err)
+	}
+	return view
+}
+
+// getAllConversationContents returns all conversation messages' content as strings
+func getAllConversationContents() []string {
+	history := GetConversationHistory()
+	var outputs []string
+	for _, msg := range history {
+		role := msg.Role
+		if role == "user" {
+			role = ">"
+		} else if role == "assistant" {
+			role = "<"
+		}
+		switch content := msg.Content.(type) {
+		case string:
+			outputs = append(outputs, fmt.Sprintf("%s %s", role, content))
+		case []ContentBlock:
+			for _, block := range content {
+				if block.Text != "" {
+					outputs = append(outputs, fmt.Sprintf("%s %s", role, block.Text))
+				} else if block.Content != "" {
+					outputs = append(outputs, fmt.Sprintf("%s %s", role, block.Content))
+				}
+			}
+		}
+	}
+	return outputs
+}
+
 func runInteractiveMode(llm Llm, config Config) {
-	// Get model from environment variable or use default based on provider
-	scanner := bufio.NewScanner(os.Stdin)
 	if !config.Quiet {
 		fmt.Printf("Model: %s\n", config.Model)
 	}
-	for {
-		fmt.Print("> ")
-		if !scanner.Scan() {
-			// EOF (Ctrl+D) detected
-			break
-		}
-
-		input := scanner.Text()
-		if input == "" {
-			continue
-		}
-
-		// Send to LLM and get response
-		UpdateConversationHistoryText(input, "user")
-
-		// Convert conversation history to interfaces
-		history := GetConversationHistory()
-		messages := ConvertToInterfaces(history)
-
-		// Process the initial request and any tool calls
-		for {
-			// Get response from LLM
-			inferenceResponse, err := llm.Inference(messages)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				break
-			}
-
-			// Check if we have tool calls
-			if len(inferenceResponse.ToolCalls) == 0 {
-				// No tool calls, print the response and continue the outer loop
-				if inferenceResponse.Content != "" {
-					fmt.Println("< " + inferenceResponse.Content)
-					// The assistant message is already added to history in the Inference method
-				}
-				break
-			}
-
-			// Process tool calls
-			_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls, config)
-			if err != nil {
-				if debugMode {
-					fmt.Fprintf(os.Stderr, "Error handling tool calls: %v\n", err)
-				}
-				break
-			}
-
-			// Add tool results to conversation history
-			for _, result := range toolResults {
-				// Add tool result to conversation history
-				AddToolResultToHistory(result.CallID, result.Output)
-			}
-
-			// Refresh the messages from conversation history
-			history = GetConversationHistory()
-			messages = ConvertToInterfaces(history)
-		}
-
-		// Print token usage and price if NOT in quiet mode
-		if !config.Quiet {
-			switch provider := llm.(type) {
-			case *Claude:
-				price := provider.CalculatePrice()
-				inputDisplay := formatTokenCount(provider.InputTokens)
-				outputDisplay := formatTokenCount(provider.OutputTokens)
-				fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
-			case *OpenAI:
-				price := provider.CalculatePrice()
-				inputDisplay := formatTokenCount(provider.InputTokens)
-				outputDisplay := formatTokenCount(provider.OutputTokens)
-				fmt.Printf("Tokens: %s input, %s output. Cost: $%.2f\n", inputDisplay, outputDisplay, price)
-			}
-		}
-		if !config.Quiet {
-			fmt.Println(strings.Repeat("━", 64))
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
+	p := tea.NewProgram(initialChatModel(llm, config), tea.WithAltScreen())
+	if err := p.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
