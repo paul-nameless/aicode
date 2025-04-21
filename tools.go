@@ -207,10 +207,10 @@ func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []
 			if err != nil {
 				result = fmt.Sprintf("Error executing GrepTool: %v", err)
 			}
-		case "FindFilesTool":
-			result, err = ExecuteFindFilesTool(toolCall.Input)
+		case "FindFiles":
+			result, err = ExecuteFindFiles(toolCall.Input)
 			if err != nil {
-				result = fmt.Sprintf("Error executing GlobTool: %v", err)
+				result = fmt.Sprintf("Error executing FindFiles: %v", err)
 			}
 		case "Bash":
 			result, err = ExecuteBashTool(toolCall.Input)
@@ -290,8 +290,8 @@ func executeCommand(command string) (string, error) {
 	return result, nil
 }
 
-// ExecuteFindFilesTool performs file pattern matching using the fd command with path patterns
-func ExecuteFindFilesTool(paramsJSON json.RawMessage) (string, error) {
+// ExecuteFindFiles performs file pattern matching using the fd command with path patterns
+func ExecuteFindFiles(paramsJSON json.RawMessage) (string, error) {
 	params, err := parseToolParams[GlobToolParams](paramsJSON, "Pattern")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse glob tool parameters: %v", err)

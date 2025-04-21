@@ -20,7 +20,7 @@ var BashToolDescription string
 var LsToolDescription string
 
 //go:embed tools/find_files.md
-var FindFilesToolDescription string
+var FindFilesDescription string
 
 //go:embed tools/dispatch_agent.md
 var DispatchAgentDescription string
@@ -47,7 +47,7 @@ var BashToolSchema string
 var LsToolSchema string
 
 //go:embed tools/find_files.json
-var FindFilesToolSchema string
+var FindFilesSchema string
 
 //go:embed tools/dispatch_agent.json
 var DispatchAgentSchema string

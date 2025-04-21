@@ -64,7 +64,7 @@ func loadOpenAITools() ([]openaiTool, error) {
 		"Edit":           {EditToolSchema, EditToolDescription},
 		"Bash":           {BashToolSchema, BashToolDescription},
 		"Ls":             {LsToolSchema, LsToolDescription},
-		"FindFilesTool":  {FindFilesToolSchema, FindFilesToolDescription},
+		"FindFiles":      {FindFilesSchema, FindFilesDescription},
 		"dispatch_agent": {DispatchAgentSchema, DispatchAgentDescription},
 		"Fetch":          {FetchToolSchema, FetchToolDescription},
 		"GrepTool":       {GrepToolSchema, GrepToolDescription},
@@ -506,9 +506,9 @@ func NewOpenAI(config Config) *OpenAI {
 		apiKey:                apiKey,
 		InputTokens:           0,
 		OutputTokens:          0,
-		InputPricePerMillion:  2, // Approximate price for GPT-4 input tokens
-		OutputPricePerMillion: 8, // Approximate price for GPT-4 output tokens
-		ContextWindowSize:     128000,
+		InputPricePerMillion:  2,
+		OutputPricePerMillion: 8,
+		ContextWindowSize:     200000,
 	}
 }
 

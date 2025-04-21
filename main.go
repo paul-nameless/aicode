@@ -187,7 +187,7 @@ var debugMode bool
 var AllTools = []string{
 	"GrepTool",
 	"GlobTool",
-	"FindFilesTool",
+	"FindFiles",
 	"Bash",
 	"Ls",
 	"View",
