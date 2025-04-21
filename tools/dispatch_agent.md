@@ -1,6 +1,6 @@
-# dispatch_agent
+# DispatchAgent
 
-Launch a new agent that has access to a subset of tools, which may include: GlobTool, GrepTool, Ls, View, depending on what tools are enabled with the --tools flag. When you are searching for a keyword or file and are not confident that you will find the right match on the first try, use the Agent tool to perform the search for you. For example:
+Launch a new agent that has access to a subset of tools, which may include: Glob, Grep, Ls, View, depending on what tools are enabled with the --tools flag. When you are searching for a keyword or file and are not confident that you will find the right match on the first try, use the Agent tool to perform the search for you. For example:
 
 - If you are searching for a keyword like "config" or "logger", the Agent tool is appropriate
 - If you want to read a specific file path, use the View or GlobTool tool instead of the Agent tool, to find the match more quickly

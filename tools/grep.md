@@ -1,4 +1,4 @@
-# GrepTool
+# Grep
 
 - Fast content search tool that works with any codebase size
 - Searches file contents using regular expressions

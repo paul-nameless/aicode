@@ -1,4 +1,4 @@
-# FindFilesTool
+# FindFiles
 
 - Fast file pattern matching tool that works with any codebase size
 - Supports glob patterns like "**/*.js" or "src/**/*.ts"

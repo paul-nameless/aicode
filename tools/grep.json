@@ -1,5 +1,5 @@
 {
-  "name": "GrepTool",
+  "name": "Grep",
   "description": "Fast content search tool that works with any codebase size.",
   "parameters": {
     "type": "object",

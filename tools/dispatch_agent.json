@@ -1,6 +1,6 @@
 {
-  "name": "dispatch_agent",
-  "description": "Launch a new agent that has access to the following tools: View, GlobTool, GrepTool, Ls.",
+  "name": "DispatchAgent",
+  "description": "Launch a new agent that has access to the following tools: View, Glob, Grep, Ls.",
   "parameters": {
     "type": "object",
     "required": ["prompt"],
