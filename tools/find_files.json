@@ -1,5 +1,5 @@
 {
-  "name": "find_files",
+  "name": "FindFiles",
   "description": "Fast file pattern matching tool that works with any codebase size.",
   "parameters": {
     "type": "object",
