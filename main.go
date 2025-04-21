@@ -24,19 +24,12 @@ func formatTokenCount(count int) string {
 
 // runSimpleMode processes a single prompt in non-interactive mode
 func runSimpleMode(prompt string, llm Llm, config Config) {
-	// Update conversation history with the user prompt
-	UpdateConversationHistoryText(prompt, "user")
-
-	// Convert conversation history to interfaces
-	history := GetConversationHistory()
-	messages := ConvertToInterfaces(history)
-
 	var finalResponse string
 
 	// Process the initial request and any tool calls
 	for {
 		// Get response from LLM
-		inferenceResponse, err := llm.Inference(messages)
+		inferenceResponse, err := llm.Inference(prompt)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -48,7 +41,6 @@ func runSimpleMode(prompt string, llm Llm, config Config) {
 		// Check if we have tool calls
 		if len(inferenceResponse.ToolCalls) == 0 {
 			// No tool calls, we'll print the response outside the loop
-			// The assistant message is already added to history in the Inference method
 			break
 		}
 
@@ -61,15 +53,13 @@ func runSimpleMode(prompt string, llm Llm, config Config) {
 			break
 		}
 
-		// Add tool results to conversation history
+		// Add tool results to the LLM's conversation history
 		for _, result := range toolResults {
-			// Add tool result to conversation history
-			AddToolResultToHistory(result.CallID, result.Output)
+			llm.AddToolResult(result.CallID, result.Output)
 		}
-
-		// Refresh the messages from conversation history
-		history = GetConversationHistory()
-		messages = ConvertToInterfaces(history)
+        
+        // Clear prompt for next iteration - we'll continue from conversation history
+        prompt = ""
 	}
 
 	// In quiet mode, only print the final response content
@@ -111,7 +101,7 @@ func initialChatModel(llm Llm, config Config) chatModel {
 	ta.CharLimit = 0
 	ta.ShowLineNumbers = false
 	ta.SetHeight(4)
-	outputs := getAllConversationContents(config)
+	outputs := llm.GetFormattedHistory()
 	return chatModel{
 		textarea:     ta,
 		llm:          llm,
@@ -139,32 +129,40 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case msg.Type == tea.KeyEnter:
 			input := m.textarea.Value()
 			if input != "" {
-				// Send to LLM and get response
-				UpdateConversationHistoryText(input, "user")
-				history := GetConversationHistory()
-				messages := ConvertToInterfaces(history)
+				// Process input with conversation
+				prompt := input
+				
 				for {
-					inferenceResponse, err := m.llm.Inference(messages)
+					// Get response from LLM
+					inferenceResponse, err := m.llm.Inference(prompt)
 					if err != nil {
 						m.err = err
 						break
 					}
+					
+					// Clear prompt for next iteration
+					prompt = ""
+					
+					// Check if we have tool calls
 					if len(inferenceResponse.ToolCalls) == 0 {
 						break
 					}
+					
+					// Process tool calls
 					_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls, m.config)
 					if err != nil {
 						m.err = err
 						break
 					}
+					
+					// Add tool results to LLM conversation history
 					for _, result := range toolResults {
-						AddToolResultToHistory(result.CallID, result.Output)
+						m.llm.AddToolResult(result.CallID, result.Output)
 					}
-					history = GetConversationHistory()
-					messages = ConvertToInterfaces(history)
 				}
-				// Add all conversation content to outputs
-				m.outputs = getAllConversationContents(m.config)
+				
+				// Update displays with conversation history
+				m.outputs = m.llm.GetFormattedHistory()
 				m.textarea.Reset()
 				m.scrollOffset = 0
 				return m, nil
@@ -300,33 +298,7 @@ func (m chatModel) View() string {
 	return view
 }
 
-// getAllConversationContents returns all conversation messages' content as strings
-func getAllConversationContents(config Config) []string {
-	history := GetConversationHistory()
-	var outputs []string
-	outputs = append(outputs, fmt.Sprintf("Model: %s", config.Model))
-	for _, msg := range history {
-		role := msg.Role
-		if role == "user" {
-			role = ">"
-		} else if role == "assistant" {
-			role = "<"
-		}
-		switch content := msg.Content.(type) {
-		case string:
-			outputs = append(outputs, fmt.Sprintf("%s %s", role, content))
-		case []ContentBlock:
-			for _, block := range content {
-				if block.Text != "" {
-					outputs = append(outputs, fmt.Sprintf("%s %s", role, block.Text))
-				} else if block.Content != "" {
-					outputs = append(outputs, fmt.Sprintf("%s %s", role, block.Content))
-				}
-			}
-		}
-	}
-	return outputs
-}
+// This function was removed as each LLM now implements GetFormattedHistory()
 
 func runInteractiveMode(llm Llm, config Config) {
 	p := tea.NewProgram(initialChatModel(llm, config), tea.WithAltScreen())
@@ -487,16 +459,16 @@ func main() {
 	// Initialize enabled tools
 	initializeTools(*toolsFlag, &config)
 
-	// Initialize context and load system prompts
-	if err := InitContext(); err != nil {
-		slog.Warn("Failed to initialize context", "error", err)
-	}
-
 	// Initialize LLM provider with configuration
 	llm, err := initLLM(config)
 	if err != nil {
 		slog.Error("Failed to initialize LLM provider", "error", err)
 		os.Exit(1)
+	}
+	
+	// Initialize context and load system prompts
+	if err := InitContext(llm); err != nil {
+		slog.Warn("Failed to initialize context", "error", err)
 	}
 
 	if config.NonInteractive {

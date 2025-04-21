@@ -21,9 +21,16 @@ type InferenceResponse struct {
 // Llm interface defines methods for LLM providers
 type Llm interface {
 	// Inference sends a prompt to the LLM and returns the unified response
-	Inference(messages []interface{}) (InferenceResponse, error)
+	Inference(prompt string) (InferenceResponse, error)
+	// AddMessage adds a message to the conversation history
+	AddMessage(content string, role string)
+	// AddToolResult adds a tool result to the conversation history
+	AddToolResult(toolUseID string, result string) 
+	// GetFormattedHistory returns the conversation history formatted for display
+	GetFormattedHistory() []string
 	// Init initializes the LLM provider with configuration
 	Init(config Config) error
+	// CalculatePrice calculates the total cost of the conversation
 	CalculatePrice() float64
 }
 
@@ -44,91 +51,19 @@ type Message struct {
 	Content interface{} `json:"content"` // Can be string or ContentBlock array
 }
 
-// Global conversation history shared between providers
-var conversationHistory []Message
-
-// InitContext loads system messages and tools
-// This should be called once at startup
-func InitContext() error {
-	// Initialize conversation history
-	conversationHistory = []Message{}
-
-	// Add system prompts
-	// UpdateConversationHistoryText(defaultSystemPrompt, "system")
-
+// InitContext loads system message files
+// This should be called once at startup for each LLM provider
+func InitContext(llm Llm) error {
 	// Check for AI.md file
 	if aiContent, err := os.ReadFile("AI.md"); err == nil {
-		// Add AI.md content as system message
-		UpdateConversationHistoryText(string(aiContent), "user")
+		// Add AI.md content as user message
+		llm.AddMessage(string(aiContent), "user")
 	}
 
 	if claudeContent, err := os.ReadFile("CLAUDE.md"); err == nil {
-		// Add CLAUDE.md content as system message
-		UpdateConversationHistoryText(string(claudeContent), "user")
+		// Add CLAUDE.md content as user message
+		llm.AddMessage(string(claudeContent), "user")
 	}
 
 	return nil
-}
-
-// UpdateConversationHistoryText updates the conversation history with a new text entry
-func UpdateConversationHistoryText(content, role string) {
-	if content == "" {
-		return
-	}
-	conversationHistory = append(conversationHistory, Message{
-		Content: content,
-		Role:    role,
-	})
-}
-
-// UpdateConversationHistory maintains backward compatibility
-func UpdateConversationHistory(content, role string) {
-	UpdateConversationHistoryText(content, role)
-}
-
-// UpdateConversationHistoryBlocks updates the conversation history with content blocks
-func UpdateConversationHistoryBlocks(contentBlocks []ContentBlock, role string) {
-	conversationHistory = append(conversationHistory, Message{
-		Content: contentBlocks,
-		Role:    role,
-	})
-}
-
-// AddToolResultToHistory adds a tool result to the conversation history
-func AddToolResultToHistory(toolUseID, result string) {
-	// Make sure we have a non-empty result
-	if result == "" {
-		result = "No result"
-	}
-
-	toolResult := []ContentBlock{
-		{
-			Type:      "tool_result",
-			ToolUseID: toolUseID,
-			Content:   result,
-		},
-	}
-
-	conversationHistory = append(conversationHistory, Message{
-		Role:    "user",
-		Content: toolResult,
-	})
-}
-
-// GetConversationHistory returns the conversation history
-func GetConversationHistory() []Message {
-	return conversationHistory
-}
-
-// ConvertToInterfaces converts Message slice to interface{} slice for provider-agnostic usage
-func ConvertToInterfaces(messages []Message) []interface{} {
-	var messagesInterface []interface{}
-	for _, msg := range messages {
-		messageMap := map[string]interface{}{
-			"role":    msg.Role,
-			"content": msg.Content,
-		}
-		messagesInterface = append(messagesInterface, messageMap)
-	}
-	return messagesInterface
 }

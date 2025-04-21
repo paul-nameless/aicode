@@ -139,24 +139,27 @@ func loadClaudeTools() ([]claudeTool, error) {
 }
 
 // Inference implements the Llm interface for Claude
-func (c *Claude) Inference(messages []interface{}) (InferenceResponse, error) {
+func (c *Claude) Inference(prompt string) (InferenceResponse, error) {
+	// Add the user's prompt to the conversation
+	c.AddMessage(prompt, "user")
+
 	// Try inference with potential retry for rate limiting
-	return c.inferenceWithRetry(messages, false)
+	return c.inferenceWithRetry(false)
 }
 
 // inferenceWithRetry handles the actual inference with optional retry for rate limiting
-func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (InferenceResponse, error) {
+func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 	// Check if we need to summarize the conversation
 	if c.shouldSummarizeConversation() || isRetry {
 		slog.Debug("Context usage approaching limit. Summarizing conversation...")
-		beforeCount := len(conversationHistory)
+		beforeCount := len(c.conversationHistory)
 		beforeTokens := c.InputTokens
 
-		err := c.summarizeConversation(messages)
+		err := c.summarizeConversation()
 		if err != nil {
 			slog.Warn("Failed to summarize conversation", "error", err)
 		} else {
-			afterCount := len(conversationHistory)
+			afterCount := len(c.conversationHistory)
 			afterTokens := c.InputTokens
 			reductionPercent := 100 - (float64(afterTokens) * 100 / float64(beforeTokens))
 			slog.Debug("Conversation summarized",
@@ -166,33 +169,6 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 				"beforeTokens", beforeTokens,
 				"afterTokens", afterTokens)
 		}
-
-		// Rebuild messages from updated conversation history
-		messages = ConvertToInterfaces(conversationHistory)
-	}
-
-	// Convert messages to Claude format
-	var claudeMessages []claudeMessage
-	// var systemContent string
-	for _, msg := range messages {
-		if msgMap, ok := msg.(map[string]interface{}); ok {
-			role, _ := msgMap["role"].(string)
-			content := msgMap["content"]
-
-			// if role == "system" {
-			// For system messages, we just append to systemContent
-			// 	if contentStr, ok := content.(string); ok {
-			// 		systemContent += contentStr + "\n\n"
-			// 	}
-			// } else {
-			// For user and assistant messages, we need to handle different formats
-			msgContent := convertToClaudeContent(content)
-			claudeMessages = append(claudeMessages, claudeMessage{
-				Role:    role,
-				Content: msgContent,
-			})
-			// }
-		}
 	}
 
 	// Get base URL from environment variable or use default
@@ -201,19 +177,11 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 		baseURL = "https://api.anthropic.com"
 	}
 
-	systemMessages := []claudeSystemMessage{
-		{
-			Type:         "text",
-			Text:         defaultSystemPrompt,
-			CacheControl: &claudeCacheControl{Type: "ephemeral"},
-		},
-	}
-	// Start a conversation
 	url := baseURL + "/v1/messages"
 	reqBody := claudeRequest{
 		Model:     c.Model,
-		Messages:  claudeMessages,
-		System:    systemMessages,
+		Messages:  c.conversationHistory,
+		System:    c.systemMessages,
 		Tools:     claudeTools,
 		MaxTokens: 20000,
 	}
@@ -238,7 +206,7 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 	// Check for rate limit error (HTTP 429)
 	if resp.StatusCode == 429 && !isRetry {
 		slog.Debug("Received rate limit (429) error. Summarizing conversation and retrying...")
-		return c.inferenceWithRetry(messages, true)
+		return c.inferenceWithRetry(true)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
@@ -254,7 +222,7 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 		if (strings.Contains(strings.ToLower(out.Error.Message), "rate limit") ||
 			strings.Contains(strings.ToLower(out.Error.Message), "too many requests")) && !isRetry {
 			slog.Debug("Received rate limit error in response. Summarizing conversation and retrying...")
-			return c.inferenceWithRetry(messages, true)
+			return c.inferenceWithRetry(true)
 		}
 		return InferenceResponse{}, errors.New(out.Error.Message)
 	}
@@ -263,21 +231,25 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 	c.InputTokens += out.Usage.InputTokens
 	c.OutputTokens += out.Usage.OutputTokens
 
-	// Process the response into our unified format
+	// Process the response into our unified format and build our response
 	response := InferenceResponse{
 		ToolCalls: []ToolCall{},
 	}
 
-	// Extract text and tool calls
-	hasToolUse := false
-	var toolUseBlocks []ContentBlock
+	// Create the assistant message for history
+	var assistantContent interface{} = ""
+	var assistantBlocks []claudeContentBlock
+	hasBlocks := false
 
 	for _, block := range out.Content {
 		if block.Type == "text" {
 			response.Content += block.Text
+			assistantBlocks = append(assistantBlocks, claudeContentBlock{
+				Type: "text",
+				Text: block.Text,
+			})
+			hasBlocks = true
 		} else if block.Type == "tool_use" {
-			hasToolUse = true
-
 			// Convert to our unified tool call format
 			response.ToolCalls = append(response.ToolCalls, ToolCall{
 				ID:    block.ID,
@@ -285,35 +257,24 @@ func (c *Claude) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 				Input: block.Input,
 			})
 
-			// Collect tool use blocks for conversation history
-			toolUseBlocks = append(toolUseBlocks, ContentBlock{
-				Type:  "tool_use",
-				ID:    block.ID,
-				Name:  block.Name,
-				Input: block.Input,
-			})
+			// Add to Claude blocks format for history
+			assistantBlocks = append(assistantBlocks, block)
+			hasBlocks = true
 		}
 	}
 
-	// If there were tool calls, add them to conversation history
-	if hasToolUse {
-		// Also add the tool use to our conversation history
-		responseBlocks := []ContentBlock{
-			{
-				Type: "text",
-				Text: response.Content,
-			},
-		}
-
-		// Add all tool use blocks
-		responseBlocks = append(responseBlocks, toolUseBlocks...)
-
-		// Update conversation history with the blocks
-		UpdateConversationHistoryBlocks(responseBlocks, "assistant")
-	} else if response.Content != "" {
-		// If there were no tool calls but we have content, just add it as text
-		UpdateConversationHistoryText(response.Content, "assistant")
+	// Create the assistant message
+	if hasBlocks {
+		assistantContent = assistantBlocks
+	} else {
+		assistantContent = response.Content
 	}
+
+	// Add to conversation history
+	c.conversationHistory = append(c.conversationHistory, claudeMessage{
+		Role:    "assistant",
+		Content: assistantContent,
+	})
 
 	return response, nil
 }
@@ -371,13 +332,15 @@ func convertToClaudeContent(content interface{}) interface{} {
 // Claude struct implements Llm interface
 type Claude struct {
 	Model                 string
-	InputTokens           int     // Track total input tokens used
-	OutputTokens          int     // Track total output tokens used
-	InputPricePerMillion  float64 // Price per million input tokens
-	OutputPricePerMillion float64 // Price per million output tokens
-	Config                Config  // Configuration
-	apiKey                string  // API key for Claude API
-	ContextWindowSize     int     // Maximum context window size in tokens
+	InputTokens           int             // Track total input tokens used
+	OutputTokens          int             // Track total output tokens used
+	InputPricePerMillion  float64         // Price per million input tokens
+	OutputPricePerMillion float64         // Price per million output tokens
+	Config                Config          // Configuration
+	apiKey                string          // API key for Claude API
+	ContextWindowSize     int             // Maximum context window size in tokens
+	conversationHistory   []claudeMessage // Internal conversation history
+	systemMessages        []claudeSystemMessage
 }
 
 // shouldSummarizeConversation checks if the conversation needs to be summarized
@@ -392,45 +355,24 @@ func (c *Claude) shouldSummarizeConversation() bool {
 }
 
 // summarizeConversation creates a summary of the conversation history
-// and replaces the history with the summary, while preserving the last user message
-func (c *Claude) summarizeConversation(messages []interface{}) error {
-	if len(conversationHistory) <= 2 {
+// and updates the conversation history
+func (c *Claude) summarizeConversation() error {
+	if len(c.conversationHistory) <= 2 {
 		// Not enough conversation to summarize
 		return nil
 	}
 
 	slog.Debug("Summarizing conversation...")
 
-	lastMessages := conversationHistory[len(conversationHistory)-2:]
+	// Save the last couple of messages to preserve context
+	lastMessages := c.conversationHistory[len(c.conversationHistory)-2:]
 
-	// Convert messages to Claude format for the summarization request
-	var claudeMessages []claudeMessage
-	// var systemContent string
-
-	for _, msg := range messages {
-		if msgMap, ok := msg.(map[string]interface{}); ok {
-			role, _ := msgMap["role"].(string)
-			content := msgMap["content"]
-
-			// if role == "system" {
-			// For system messages, we just append to systemContent
-			// if contentStr, ok := content.(string); ok {
-			// 	systemContent += contentStr + "\n\n"
-			// }
-			// } else {
-			// For user and assistant messages, we need to handle different formats
-			msgContent := convertToClaudeContent(content)
-			claudeMessages = append(claudeMessages, claudeMessage{
-				Role:    role,
-				Content: msgContent,
-			})
-			// }
-		}
-	}
+	// Copy conversation for summarization request
+	summaryMessages := make([]claudeMessage, len(c.conversationHistory))
+	copy(summaryMessages, c.conversationHistory)
 
 	// Prepare a special message asking for the summary
-	// This makes it clearer to the model what we want
-	claudeMessages = append(claudeMessages, claudeMessage{
+	summaryMessages = append(summaryMessages, claudeMessage{
 		Role:    "user",
 		Content: "Please summarize our conversation so far following the instructions in the system prompt.",
 	})
@@ -442,11 +384,12 @@ func (c *Claude) summarizeConversation(messages []interface{}) error {
 			CacheControl: &claudeCacheControl{Type: "ephemeral"},
 		},
 	}
+
 	// Create a request to summarize the conversation
 	url := "https://api.anthropic.com/v1/messages"
 	reqBody := claudeRequest{
 		Model:       c.Model,
-		Messages:    claudeMessages,
+		Messages:    summaryMessages,
 		System:      systemMessages,
 		MaxTokens:   20000,
 		Temperature: 0.2, // Lower temperature for more consistent summaries
@@ -517,25 +460,28 @@ func (c *Claude) summarizeConversation(messages []interface{}) error {
 		return errors.New("received empty summary")
 	}
 
-	// Replace conversation history with the summary as an assistant message
-	conversationHistory = []Message{
+	// Replace conversation history with system message, summary, and last messages
+	newConversation := []claudeMessage{
+		// Keep the system message (should be the first one)
+		c.conversationHistory[0],
+		// Add summary as assistant message
 		{
 			Role:    "assistant",
 			Content: summaryText,
 		},
 	}
 
-	if len(lastMessages) != 0 {
-		conversationHistory = append(conversationHistory, lastMessages...)
-	}
+	// Add back the last messages
+	newConversation = append(newConversation, lastMessages...)
+	c.conversationHistory = newConversation
 
 	// Calculate token stats before reset
 	inputTokensBefore := c.InputTokens
 
-	// We need to estimate the size of the new conversation history
+	// We need to estimate the size of the new conversation
 	// A simple approach is to count characters and divide by 4 (approximation)
 	var summaryLength int
-	for _, msg := range conversationHistory {
+	for _, msg := range c.conversationHistory {
 		// Handle string content
 		if contentStr, ok := msg.Content.(string); ok {
 			summaryLength += len(contentStr)
@@ -543,7 +489,7 @@ func (c *Claude) summarizeConversation(messages []interface{}) error {
 		}
 
 		// Handle array of content blocks
-		if contentBlocks, ok := msg.Content.([]ContentBlock); ok {
+		if contentBlocks, ok := msg.Content.([]claudeContentBlock); ok {
 			for _, block := range contentBlocks {
 				if block.Type == "text" {
 					summaryLength += len(block.Text)
@@ -592,6 +538,71 @@ func (c *Claude) CalculatePrice() float64 {
 	return inputPrice + outputPrice
 }
 
+// AddMessage adds a message to the conversation history
+func (c *Claude) AddMessage(content string, role string) {
+	if content == "" {
+		return
+	}
+	c.conversationHistory = append(c.conversationHistory, claudeMessage{
+		Role:    role,
+		Content: content,
+	})
+}
+
+// AddToolResult adds a tool result to the conversation history
+func (c *Claude) AddToolResult(toolUseID string, result string) {
+	if result == "" {
+		result = "No result"
+	}
+
+	c.conversationHistory = append(c.conversationHistory, claudeMessage{
+		Role: "user",
+		Content: []claudeContentBlock{
+			{
+				Type:      "tool_result",
+				ToolUseID: toolUseID,
+				Content:   result,
+			},
+		},
+	})
+}
+
+// GetFormattedHistory returns the conversation history formatted for display
+func (c *Claude) GetFormattedHistory() []string {
+	var outputs []string
+	outputs = append(outputs, fmt.Sprintf("Model: %s", c.Model))
+
+	for _, msg := range c.conversationHistory {
+		role := msg.Role
+		if role == "user" {
+			role = ">"
+		} else if role == "assistant" {
+			role = "<"
+		}
+
+		// Handle string content
+		if contentStr, ok := msg.Content.(string); ok {
+			outputs = append(outputs, fmt.Sprintf("%s %s", role, contentStr))
+			continue
+		}
+
+		// Handle array of content blocks
+		if contentBlocks, ok := msg.Content.([]claudeContentBlock); ok {
+			for _, block := range contentBlocks {
+				if block.Type == "text" {
+					outputs = append(outputs, fmt.Sprintf("%s %s", role, block.Text))
+				} else if block.Type == "tool_result" {
+					outputs = append(outputs, fmt.Sprintf("%s [Tool Result: %s]", role, block.Content))
+				} else if block.Type == "tool_use" {
+					outputs = append(outputs, fmt.Sprintf("%s [Tool Use: %s]", role, block.Name))
+				}
+			}
+		}
+	}
+
+	return outputs
+}
+
 // NewClaude creates a new Claude provider
 func NewClaude(config Config) *Claude {
 	model := config.Model
@@ -610,12 +621,26 @@ func NewClaude(config Config) *Claude {
 		OutputTokens:          0,
 		InputPricePerMillion:  3.0,  // $3 per million input tokens
 		OutputPricePerMillion: 15.0, // $15 per million output tokens
-		// ContextWindowSize:     200_000,
-		ContextWindowSize: 80_000,
+		ContextWindowSize:     80_000,
+		conversationHistory:   []claudeMessage{},
+		systemMessages: []claudeSystemMessage{
+			{
+				Type:         "text",
+				Text:         defaultSystemPrompt,
+				CacheControl: &claudeCacheControl{Type: "ephemeral"},
+			},
+		},
 	}
 }
 
 // Init initializes the Claude provider with given configuration
 func (c *Claude) Init(config Config) error {
+	// Add system prompt as first message
+	// systemMsg := claudeMessage{
+	// 	Role:    "system",
+	// 	Content: defaultSystemPrompt,
+	// }
+	// c.conversationHistory = append(c.conversationHistory, systemMsg)
+
 	return LoadClaudeContext()
 }

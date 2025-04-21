@@ -15,12 +15,26 @@ import (
 // Global variables for OpenAI
 var openaiTools []openaiTool // Store the tools loaded at startup
 
+type openaiMessage struct {
+	Role       string           `json:"role"`
+	Content    string           `json:"content,omitempty"`
+	ToolCalls  []openaiToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string           `json:"tool_call_id,omitempty"`
+	Type       string           `json:"type,omitempty"` // For determining message type internally
+}
+
+type openaiToolCall struct {
+	ID       string         `json:"id"`
+	Type     string         `json:"type"`
+	Function openaiFunction `json:"function"`
+}
+
 type openaiRequest struct {
-	Model       string        `json:"model"`
-	Messages    []interface{} `json:"messages"`
-	Tools       []openaiTool  `json:"tools,omitempty"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	Temperature float64       `json:"temperature,omitempty"`
+	Model       string          `json:"model"`
+	Messages    []openaiMessage `json:"messages"`
+	Tools       []openaiTool    `json:"tools,omitempty"`
+	MaxTokens   int             `json:"max_tokens,omitempty"`
+	Temperature float64         `json:"temperature,omitempty"`
 }
 
 type openaiTool struct {
@@ -32,6 +46,7 @@ type openaiFunction struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Parameters  json.RawMessage `json:"parameters,omitempty"`
+	Arguments   json.RawMessage `json:"arguments,omitempty"`
 }
 
 type openaiResponse struct {
@@ -121,24 +136,27 @@ func LoadOpenAIContext() error {
 }
 
 // Inference implements the Llm interface for OpenAI
-func (o *OpenAI) Inference(messages []interface{}) (InferenceResponse, error) {
+func (o *OpenAI) Inference(prompt string) (InferenceResponse, error) {
+	// Add the user's prompt to the conversation
+	o.AddMessage(prompt, "user")
+
 	// Try inference with potential retry for rate limiting
-	return o.inferenceWithRetry(messages, false)
+	return o.inferenceWithRetry(false)
 }
 
 // inferenceWithRetry handles the actual inference with optional retry for rate limiting
-func (o *OpenAI) inferenceWithRetry(messages []interface{}, isRetry bool) (InferenceResponse, error) {
+func (o *OpenAI) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 	// Check if we need to summarize the conversation
 	if o.shouldSummarizeConversation() || isRetry {
 		slog.Debug("Context usage approaching limit. Summarizing conversation...")
-		beforeCount := len(conversationHistory)
+		beforeCount := len(o.conversationHistory)
 		beforeTokens := o.InputTokens
 
-		err := o.summarizeConversation(messages)
+		err := o.summarizeConversation()
 		if err != nil {
 			slog.Warn("Failed to summarize conversation", "error", err)
 		} else {
-			afterCount := len(conversationHistory)
+			afterCount := len(o.conversationHistory)
 			afterTokens := o.InputTokens
 			reductionPercent := 100 - (float64(afterTokens) * 100 / float64(beforeTokens))
 			slog.Debug("Conversation summarized",
@@ -146,9 +164,6 @@ func (o *OpenAI) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 				"afterCount", afterCount,
 				"reductionPercent", reductionPercent)
 		}
-
-		// Rebuild messages from updated conversation history
-		messages = ConvertToInterfaces(conversationHistory)
 	}
 
 	// Get base URL from environment variable or use default
@@ -157,13 +172,10 @@ func (o *OpenAI) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 		baseURL = "https://api.openai.com"
 	}
 
-	// Convert content blocks to OpenAI format if needed
-	convertedMessages := convertMessagesToOpenAIFormat(messages)
-
 	url := baseURL + "/v1/chat/completions"
 	reqBody := openaiRequest{
 		Model:     o.Model,
-		Messages:  convertedMessages,
+		Messages:  o.conversationHistory,
 		Tools:     openaiTools,
 		MaxTokens: 4000,
 	}
@@ -184,7 +196,7 @@ func (o *OpenAI) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 	// Check for rate limit error (HTTP 429)
 	if resp.StatusCode == 429 && !isRetry {
 		slog.Debug("Received rate limit (429) error. Summarizing conversation and retrying...")
-		return o.inferenceWithRetry(messages, true)
+		return o.inferenceWithRetry(true)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
@@ -206,7 +218,7 @@ func (o *OpenAI) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 		if (strings.Contains(strings.ToLower(out.Error.Message), "rate limit") ||
 			strings.Contains(strings.ToLower(out.Error.Message), "too many requests")) && !isRetry {
 			slog.Debug("Received rate limit error in response. Summarizing conversation and retrying...")
-			return o.inferenceWithRetry(messages, true)
+			return o.inferenceWithRetry(true)
 		}
 		return InferenceResponse{}, errors.New(out.Error.Message)
 	}
@@ -224,55 +236,49 @@ func (o *OpenAI) inferenceWithRetry(messages []interface{}, isRetry bool) (Infer
 		ToolCalls: []ToolCall{},
 	}
 
-	// Extract any tool calls
-	hasToolUse := false
-	var toolUseBlocks []ContentBlock
-
-	for _, toolCall := range out.Choices[0].Message.ToolCalls {
-		hasToolUse = true
-
-		toolCallData := ToolCall{
-			ID:    toolCall.ID,
-			Name:  toolCall.Function.Name,
-			Input: toolCall.Function.Arguments,
-		}
-
-		response.ToolCalls = append(response.ToolCalls, toolCallData)
-
-		// Collect tool use blocks for conversation history
-		toolUseBlocks = append(toolUseBlocks, ContentBlock{
-			Type:  "tool_use",
-			ID:    toolCall.ID,
-			Name:  toolCall.Function.Name,
-			Input: toolCall.Function.Arguments,
-		})
+	// Create assistant message for conversation history
+	assistantMessage := openaiMessage{
+		Role:    "assistant",
+		Content: out.Choices[0].Message.Content,
+		Type:    "text",
 	}
 
-	// If there are tool calls, add them to conversation history
-	if hasToolUse {
-		// Also add the tool use to our conversation history
-		responseBlocks := []ContentBlock{
-			{
-				Type: "text",
-				Text: response.Content,
-			},
+	// Process tool calls if any
+	if len(out.Choices[0].Message.ToolCalls) > 0 {
+		var toolCalls []openaiToolCall
+
+		for _, toolCall := range out.Choices[0].Message.ToolCalls {
+			// Add to response for API consumer
+			toolCallData := ToolCall{
+				ID:    toolCall.ID,
+				Name:  toolCall.Function.Name,
+				Input: toolCall.Function.Arguments,
+			}
+			response.ToolCalls = append(response.ToolCalls, toolCallData)
+
+			// Add to OpenAI format tool calls for history
+			toolCalls = append(toolCalls, openaiToolCall{
+				ID:   toolCall.ID,
+				Type: "function",
+				Function: openaiFunction{
+					Name:      toolCall.Function.Name,
+					Arguments: toolCall.Function.Arguments,
+				},
+			})
 		}
 
-		// Add all tool use blocks
-		responseBlocks = append(responseBlocks, toolUseBlocks...)
-
-		// Update conversation history with the blocks
-		UpdateConversationHistoryBlocks(responseBlocks, "assistant")
-	} else if response.Content != "" {
-		// If there were no tool calls but we have content, just add it as text
-		UpdateConversationHistoryText(response.Content, "assistant")
+		// Add tool calls to the message
+		assistantMessage.ToolCalls = toolCalls
 	}
+
+	// Add the assistant message to conversation history
+	o.conversationHistory = append(o.conversationHistory, assistantMessage)
 
 	return response, nil
 }
 
 // convertMessagesToOpenAIFormat converts messages with content blocks to OpenAI format
-func convertMessagesToOpenAIFormat(messages []interface{}) []interface{} {
+func convertMessagesToOpenAIFormat(messages []Message) []interface{} {
 	// Add system message at beginning with defaultSystemPrompt
 	result := []interface{}{
 		map[string]interface{}{
@@ -282,79 +288,83 @@ func convertMessagesToOpenAIFormat(messages []interface{}) []interface{} {
 	}
 
 	for _, msg := range messages {
-		if msgMap, ok := msg.(map[string]interface{}); ok {
-			role, _ := msgMap["role"].(string)
-			content := msgMap["content"]
+		role := msg.Role
+		content := msg.Content
 
-			// If it's a regular string content, just keep it as is
-			if _, ok := content.(string); ok {
-				result = append(result, msgMap)
-				continue
+		// If it's a regular string content, just keep it as is
+		if contentStr, ok := content.(string); ok {
+			result = append(result, map[string]interface{}{
+				"role":    role,
+				"content": contentStr,
+			})
+			continue
+		}
+
+		// If it's a tool result (from user), convert to OpenAI's format
+		if role == "user" {
+			if blocks, ok := content.([]ContentBlock); ok {
+				for _, block := range blocks {
+					if block.Type == "tool_result" {
+						// Format for OpenAI
+						result = append(result, map[string]interface{}{
+							"role":         "tool", // OpenAI uses "tool" role
+							"tool_call_id": block.ToolUseID,
+							"content":      block.Content,
+						})
+					}
+				}
 			}
+			continue
+		}
 
-			// If it's a tool result (from user), convert to OpenAI's format
-			if role == "user" {
-				if blocks, ok := content.([]ContentBlock); ok {
+		// If it's an assistant with tool calls
+		if role == "assistant" {
+			if blocks, ok := content.([]ContentBlock); ok {
+				hasToolUse := false
+
+				// Check if there are any tool_use blocks
+				for _, block := range blocks {
+					if block.Type == "tool_use" {
+						hasToolUse = true
+						break
+					}
+				}
+
+				if hasToolUse {
+					// Create a formatted message for OpenAI
+					toolCalls := []map[string]interface{}{}
+					var textContent string
+
 					for _, block := range blocks {
-						if block.Type == "tool_result" {
-							// Format for OpenAI
-							result = append(result, map[string]interface{}{
-								"role":         "tool", // OpenAI uses "tool" role
-								"tool_call_id": block.ToolUseID,
-								"content":      block.Content,
+						if block.Type == "text" {
+							textContent = block.Text
+						} else if block.Type == "tool_use" {
+							toolCalls = append(toolCalls, map[string]interface{}{
+								"id":   block.ID,
+								"type": "function",
+								"function": map[string]interface{}{
+									"name":      block.Name,
+									"arguments": string(block.Input),
+								},
 							})
 						}
 					}
-				}
-				continue
-			}
 
-			// If it's an assistant with tool calls
-			if role == "assistant" {
-				if blocks, ok := content.([]ContentBlock); ok {
-					hasToolUse := false
-
-					// Check if there are any tool_use blocks
-					for _, block := range blocks {
-						if block.Type == "tool_use" {
-							hasToolUse = true
-							break
-						}
-					}
-
-					if hasToolUse {
-						// Create a formatted message for OpenAI
-						toolCalls := []map[string]interface{}{}
-						var textContent string
-
-						for _, block := range blocks {
-							if block.Type == "text" {
-								textContent = block.Text
-							} else if block.Type == "tool_use" {
-								toolCalls = append(toolCalls, map[string]interface{}{
-									"id":   block.ID,
-									"type": "function",
-									"function": map[string]interface{}{
-										"name":      block.Name,
-										"arguments": string(block.Input),
-									},
-								})
-							}
-						}
-
-						result = append(result, map[string]interface{}{
-							"role":       role,
-							"content":    textContent,
-							"tool_calls": toolCalls,
-						})
-						continue
-					}
+					result = append(result, map[string]interface{}{
+						"role":       role,
+						"content":    textContent,
+						"tool_calls": toolCalls,
+					})
+					continue
 				}
 			}
-
-			// Default - just pass through
-			result = append(result, msgMap)
 		}
+
+		// Default - convert to map
+		result = append(result, map[string]interface{}{
+			"role":    role,
+			"content": content,
+		})
 	}
 
 	return result
@@ -363,13 +373,14 @@ func convertMessagesToOpenAIFormat(messages []interface{}) []interface{} {
 // OpenAI struct implements Llm interface
 type OpenAI struct {
 	Model                 string
-	InputTokens           int     // Track total input tokens used
-	OutputTokens          int     // Track total output tokens used
-	InputPricePerMillion  float64 // Price per million input tokens
-	OutputPricePerMillion float64 // Price per million output tokens
-	Config                Config  // Configuration
-	apiKey                string  // API key for OpenAI API
-	ContextWindowSize     int     // Maximum context window size in tokens
+	InputTokens           int             // Track total input tokens used
+	OutputTokens          int             // Track total output tokens used
+	InputPricePerMillion  float64         // Price per million input tokens
+	OutputPricePerMillion float64         // Price per million output tokens
+	Config                Config          // Configuration
+	apiKey                string          // API key for OpenAI API
+	ContextWindowSize     int             // Maximum context window size in tokens
+	conversationHistory   []openaiMessage // Internal conversation history
 }
 
 // shouldSummarizeConversation checks if the conversation needs to be summarized
@@ -384,30 +395,32 @@ func (o *OpenAI) shouldSummarizeConversation() bool {
 }
 
 // summarizeConversation creates a summary of the conversation history
-// and replaces the history with the summary, while preserving the last user message
-func (o *OpenAI) summarizeConversation(messages []interface{}) error {
-	if len(conversationHistory) <= 2 {
+// and updates the conversation with the summary
+func (o *OpenAI) summarizeConversation() error {
+	if len(o.conversationHistory) <= 2 {
 		// Not enough conversation to summarize
 		return nil
 	}
 
-	lastMessages := conversationHistory[len(conversationHistory)-2:]
+	// Save the last few messages (typically user messages that need responses)
+	lastMessages := o.conversationHistory[len(o.conversationHistory)-2:]
 
-	// Convert messages to OpenAI format for the summarization request
-	convertedMessages := convertMessagesToOpenAIFormat(messages)
+	// Copy the current conversation for the summarization request
+	summaryMessages := make([]openaiMessage, len(o.conversationHistory))
+	copy(summaryMessages, o.conversationHistory)
 
 	// Prepare a special message asking for the summary
-	// This makes it clearer to the model what we want
-	convertedMessages = append(convertedMessages, map[string]interface{}{
-		"role":    "user",
-		"content": summaryPrompt,
+	summaryMessages = append(summaryMessages, openaiMessage{
+		Role:    "user",
+		Content: summaryPrompt,
+		Type:    "text",
 	})
 
 	// Create a request to summarize the conversation
 	url := "https://api.openai.com/v1/chat/completions"
 	reqBody := openaiRequest{
 		Model:       o.Model,
-		Messages:    convertedMessages,
+		Messages:    summaryMessages,
 		MaxTokens:   4000,
 		Temperature: 0.2, // Lower temperature for more consistent summaries
 	}
@@ -453,17 +466,21 @@ func (o *OpenAI) summarizeConversation(messages []interface{}) error {
 		return errors.New("received empty summary")
 	}
 
-	// Replace conversation history with the summary as an assistant message
-	conversationHistory = []Message{
+	// Replace the conversation history with just the system message, summary and recent messages
+	newHistory := []openaiMessage{
+		// Keep the system prompt that should be first in the list
+		o.conversationHistory[0],
+		// Add summary as assistant message
 		{
 			Role:    "assistant",
 			Content: summaryText,
+			Type:    "text",
 		},
 	}
 
-	if len(lastMessages) != 0 {
-		conversationHistory = append(conversationHistory, lastMessages...)
-	}
+	// Add back the most recent messages
+	newHistory = append(newHistory, lastMessages...)
+	o.conversationHistory = newHistory
 
 	// Reset the token counter since we've summarized the conversation
 	o.InputTokens = 0
@@ -477,6 +494,60 @@ func (o *OpenAI) CalculatePrice() float64 {
 	inputPrice := float64(o.InputTokens) * o.InputPricePerMillion / 1000000.0
 	outputPrice := float64(o.OutputTokens) * o.OutputPricePerMillion / 1000000.0
 	return inputPrice + outputPrice
+}
+
+// AddMessage adds a message to the conversation history
+func (o *OpenAI) AddMessage(content string, role string) {
+	if content == "" {
+		return
+	}
+	o.conversationHistory = append(o.conversationHistory, openaiMessage{
+		Role:    role,
+		Content: content,
+		Type:    "text",
+	})
+}
+
+// AddToolResult adds a tool result to the conversation history
+func (o *OpenAI) AddToolResult(toolUseID string, result string) {
+	if result == "" {
+		result = "No result"
+	}
+
+	o.conversationHistory = append(o.conversationHistory, openaiMessage{
+		Role:       "tool",
+		ToolCallID: toolUseID,
+		Content:    result,
+		Type:       "tool_result",
+	})
+}
+
+// GetFormattedHistory returns the conversation history formatted for display
+func (o *OpenAI) GetFormattedHistory() []string {
+	var outputs []string
+	outputs = append(outputs, fmt.Sprintf("Model: %s", o.Model))
+
+	for _, msg := range o.conversationHistory {
+		role := msg.Role
+		if role == "system" {
+			continue
+		}
+		if role == "user" {
+			role = ">"
+		} else if role == "assistant" {
+			role = "<"
+		} else if role == "tool" {
+			role = "T"
+		}
+
+		if msg.Type == "tool_result" {
+			outputs = append(outputs, fmt.Sprintf("%s %s", role, msg.Content))
+		} else if msg.Type == "text" || msg.Type == "" {
+			outputs = append(outputs, fmt.Sprintf("%s %s", role, msg.Content))
+		}
+	}
+
+	return outputs
 }
 
 // NewOpenAI creates a new OpenAI provider
@@ -502,11 +573,20 @@ func NewOpenAI(config Config) *OpenAI {
 		InputPricePerMillion:  2,
 		OutputPricePerMillion: 8,
 		ContextWindowSize:     200000,
+		conversationHistory:   []openaiMessage{},
 	}
 }
 
 // Init initializes the OpenAI provider with given configuration
 func (o *OpenAI) Init(config Config) error {
 	o.Config = config
+
+	// Add system prompt as the first message
+	o.conversationHistory = append(o.conversationHistory, openaiMessage{
+		Role:    "system",
+		Content: defaultSystemPrompt,
+		Type:    "text",
+	})
+
 	return LoadOpenAIContext()
 }
