@@ -30,7 +30,8 @@ tasks:
   lint:
     - docker run --rm -v "$(pwd):/app" -w /app golangci/golangci-lint:latest golangci-lint run
 
+  fmt:
+    - go fmt .
+
   ch:
-    deps: [lint]
-    cmds:
-      - go fmt .
+    deps: [lint, fmt]
