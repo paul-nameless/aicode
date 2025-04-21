@@ -237,7 +237,7 @@ func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 	}
 
 	// Create the assistant message for history
-	var assistantContent interface{} = ""
+	var assistantContent interface{}
 	var assistantBlocks []claudeContentBlock
 	hasBlocks := false
 
@@ -279,55 +279,7 @@ func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 	return response, nil
 }
 
-// convertToClaudeContent converts our generic content to Claude's specific format
-func convertToClaudeContent(content interface{}) interface{} {
-	// If it's a string, just return it
-	if contentStr, ok := content.(string); ok {
-		return contentStr
-	}
-
-	// If it's an array of ContentBlock, convert to claudeContentBlock
-	if contentBlocks, ok := content.([]ContentBlock); ok {
-		claudeBlocks := make([]claudeContentBlock, 0, len(contentBlocks))
-
-		for _, block := range contentBlocks {
-			switch block.Type {
-			case "text":
-				// Only add text blocks if they have actual content
-				if block.Text != "" {
-					claudeBlocks = append(claudeBlocks, claudeContentBlock{
-						Type: "text",
-						Text: block.Text,
-					})
-				}
-			case "tool_use":
-				claudeBlocks = append(claudeBlocks, claudeContentBlock{
-					Type:  "tool_use",
-					ID:    block.ID,
-					Name:  block.Name,
-					Input: block.Input,
-				})
-			case "tool_result":
-				claudeBlocks = append(claudeBlocks, claudeContentBlock{
-					Type:      "tool_result",
-					ToolUseID: block.ToolUseID,
-					Content:   block.Content,
-				})
-			}
-		}
-
-		// If we ended up with no blocks, just return an empty string
-		// to avoid Claude API errors
-		if len(claudeBlocks) == 0 {
-			return ""
-		}
-
-		return claudeBlocks
-	}
-
-	// Try to handle other formats (arrays of maps, etc.)
-	return content
-}
+// Function removed since it was unused
 
 // Claude struct implements Llm interface
 type Claude struct {

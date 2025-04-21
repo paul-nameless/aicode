@@ -124,12 +124,7 @@ func (m chatModel) Init() tea.Cmd {
 	return textarea.Blink
 }
 
-// Command to deliver an updateResultMsg message
-func deliverResult(msg updateResultMsg) tea.Cmd {
-	return func() tea.Msg {
-		return msg
-	}
-}
+// Function removed since it was unused
 
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -307,9 +302,7 @@ func (m chatModel) getOutputLines() []string {
 	var lines []string
 	for _, output := range m.outputs {
 		entry := fmt.Sprintf("%s\n", output)
-		for _, line := range splitLines(entry) {
-			lines = append(lines, line)
-		}
+		lines = append(lines, splitLines(entry)...)
 		lines = append(lines, "")
 	}
 	return lines
