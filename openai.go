@@ -518,7 +518,7 @@ func NewOpenAI(config Config) *OpenAI {
 		OutputTokens:          0,
 		InputPricePerMillion:  2,
 		OutputPricePerMillion: 8,
-		ContextWindowSize:     200000,
+		ContextWindowSize:     400000,
 		conversationHistory:   []openaiMessage{},
 	}
 }
