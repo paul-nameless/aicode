@@ -34,4 +34,4 @@ tasks:
     - go fmt .
 
   ch:
-    deps: [lint, fmt]
+    deps: [fmt, lint]

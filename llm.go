@@ -124,15 +124,10 @@ func GetSystemPrompt(config Config) string {
 // InitContext loads system message files
 // This should be called once at startup for each LLM provider
 func InitContext(llm Llm) error {
-	// Check for AI.md file
-	if aiContent, err := os.ReadFile("AI.md"); err == nil {
-		// Add AI.md content as user message
-		llm.AddMessage(string(aiContent), "user")
-	}
-
-	if claudeContent, err := os.ReadFile("CLAUDE.md"); err == nil {
-		// Add CLAUDE.md content as user message
-		llm.AddMessage(string(claudeContent), "user")
+	for _, fname := range []string{"AI.md", "CLAUDE.md"} {
+		if content, err := os.ReadFile(fname); err == nil {
+			llm.AddMessage(string(content), "user")
+		}
 	}
 
 	return nil

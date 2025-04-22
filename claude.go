@@ -12,9 +12,6 @@ import (
 	"strings"
 )
 
-// Global variables for Claude
-var claudeTools []claudeTool // Store the tools loaded at startup
-
 type claudeRequest struct {
 	Model       string                `json:"model"`
 	Messages    []claudeMessage       `json:"messages"`
@@ -72,20 +69,8 @@ type claudeResponse struct {
 	} `json:"error,omitempty"`
 }
 
-// LoadClaudeContext loads tools and prompts for Claude
-func LoadClaudeContext() error {
-	// Load tools
-	var err error
-	claudeTools, err = loadClaudeTools()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // loadClaudeTools loads tools using the schema constants defined in tools.go
-func loadClaudeTools() ([]claudeTool, error) {
+func loadClaudeTools() []claudeTool {
 	var toolsList []claudeTool
 
 	// Process each tool
@@ -114,7 +99,7 @@ func loadClaudeTools() ([]claudeTool, error) {
 		toolsList[len(toolsList)-1].CacheControl = &claudeCacheControl{Type: "ephemeral"}
 	}
 
-	return toolsList, nil
+	return toolsList
 }
 
 // Inference implements the Llm interface for Claude
@@ -161,7 +146,7 @@ func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 		Model:     c.Model,
 		Messages:  c.conversationHistory,
 		System:    c.systemMessages,
-		Tools:     claudeTools,
+		Tools:     c.tools,
 		MaxTokens: 20000,
 	}
 
@@ -272,6 +257,7 @@ type Claude struct {
 	ContextWindowSize     int             // Maximum context window size in tokens
 	conversationHistory   []claudeMessage // Internal conversation history
 	systemMessages        []claudeSystemMessage
+	tools                 []claudeTool
 }
 
 func (c *Claude) Clear() {
@@ -587,6 +573,7 @@ func NewClaude(config Config) *Claude {
 	if apiKey == "" {
 		apiKey = os.Getenv("ANTHROPIC_API_KEY")
 	}
+	tools := loadClaudeTools()
 
 	return &Claude{
 		apiKey:                apiKey,
@@ -597,6 +584,7 @@ func NewClaude(config Config) *Claude {
 		OutputPricePerMillion: 15.0, // $15 per million output tokens
 		ContextWindowSize:     80_000,
 		conversationHistory:   []claudeMessage{},
+		tools:                 tools,
 		systemMessages: []claudeSystemMessage{
 			{
 				Type:         "text",
@@ -609,12 +597,5 @@ func NewClaude(config Config) *Claude {
 
 // Init initializes the Claude provider with given configuration
 func (c *Claude) Init(config Config) error {
-	// Add system prompt as first message
-	// systemMsg := claudeMessage{
-	// 	Role:    "system",
-	// 	Content: defaultSystemPrompt,
-	// }
-	// c.conversationHistory = append(c.conversationHistory, systemMsg)
-
-	return LoadClaudeContext()
+	return nil
 }

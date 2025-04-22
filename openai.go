@@ -12,9 +12,6 @@ import (
 	"strings"
 )
 
-// Global variables for OpenAI
-var openaiTools []openaiTool // Store the tools loaded at startup
-
 type openaiMessage struct {
 	Role       string           `json:"role"`
 	Content    string           `json:"content,omitempty"`
@@ -67,7 +64,7 @@ type openaiResponse struct {
 }
 
 // loadOpenAITools loads tools using the schema constants defined in tools.go
-func loadOpenAITools() ([]openaiTool, error) {
+func loadOpenAITools() []openaiTool {
 	var toolsList []openaiTool
 
 	// Process each tool
@@ -96,20 +93,7 @@ func loadOpenAITools() ([]openaiTool, error) {
 
 	}
 
-	return toolsList, nil
-}
-
-// LoadOpenAIContext loads tools for OpenAI
-// This should be called once at startup
-func LoadOpenAIContext() error {
-	// Load tools
-	var err error
-	openaiTools, err = loadOpenAITools()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return toolsList
 }
 
 // Inference implements the Llm interface for OpenAI
@@ -153,7 +137,7 @@ func (o *OpenAI) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 	reqBody := openaiRequest{
 		Model:     o.Model,
 		Messages:  o.conversationHistory,
-		Tools:     openaiTools,
+		Tools:     o.tools,
 		MaxTokens: 4000,
 	}
 	bodyBytes, _ := json.Marshal(&reqBody)
@@ -267,6 +251,7 @@ type OpenAI struct {
 	apiKey                string          // API key for OpenAI API
 	ContextWindowSize     int             // Maximum context window size in tokens
 	conversationHistory   []openaiMessage // Internal conversation history
+	tools                 []openaiTool
 }
 
 func (o *OpenAI) Clear() {
@@ -490,7 +475,18 @@ func NewOpenAI(config Config) *OpenAI {
 		apiKey = os.Getenv("OPENAI_API_KEY")
 	}
 
+	conversationHistory := []openaiMessage{
+		{
+			Role:    "system",
+			Content: GetSystemPrompt(config),
+			Type:    "text",
+		},
+	}
+
+	tools := loadOpenAITools()
+
 	return &OpenAI{
+		Config:                config,
 		Model:                 model,
 		apiKey:                apiKey,
 		InputTokens:           0,
@@ -498,20 +494,12 @@ func NewOpenAI(config Config) *OpenAI {
 		InputPricePerMillion:  2,
 		OutputPricePerMillion: 8,
 		ContextWindowSize:     400000,
-		conversationHistory:   []openaiMessage{},
+		conversationHistory:   conversationHistory,
+		tools:                 tools,
 	}
 }
 
 // Init initializes the OpenAI provider with given configuration
 func (o *OpenAI) Init(config Config) error {
-	o.Config = config
-
-	// Add system prompt as the first message
-	o.conversationHistory = append(o.conversationHistory, openaiMessage{
-		Role:    "system",
-		Content: GetSystemPrompt(config),
-		Type:    "text",
-	})
-
-	return LoadOpenAIContext()
+	return nil
 }
