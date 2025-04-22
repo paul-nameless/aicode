@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -78,7 +79,7 @@ func GetSystemPrompt(config Config) string {
 	b.WriteString("As you answer the user's questions, you can use the following context:\n\n")
 
 	b.WriteString(`<context name="directoryStructure">Below is a snapshot of this project's file structure at the start of the conversation. This snapshot will NOT update during the conversation.`)
-	// b.WriteString(listProjectFiles())
+	b.WriteString(listProjectFiles())
 	b.WriteString("</context>\n")
 
 	// 	b.WriteString(`<context name="gitStatus">This is the git status at the start of the conversation. Note that this status is a snapshot in time, and will not update during the conversation.
@@ -100,26 +101,39 @@ func GetSystemPrompt(config Config) string {
 	return b.String()
 }
 
-// func listProjectFiles() string {
-// 	wd, err := os.Getwd()
-// 	if err != nil {
-// 		return ""
-// 	}
-// 	files, err := os.ReadDir(wd)
-// 	if err != nil {
-// 		return ""
-// 	}
-// 	var b strings.Builder
-// 	b.WriteString("- " + wd + "/\n")
-// 	for _, f := range files {
-// 		name := f.Name()
-// 		if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
-// 			continue
-// 		}
-// 		b.WriteString("  - " + name + "\n")
-// 	}
-// 	return b.String()
-// }
+func listProjectFiles() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(wd + "/\n")
+	listFilesRecursive(wd, "", "  ", &b)
+	return b.String()
+}
+
+func listFilesRecursive(root, path, indent string, b *strings.Builder) {
+	fullPath := filepath.Join(root, path)
+	files, err := os.ReadDir(fullPath)
+	if err != nil {
+		return
+	}
+
+	for _, f := range files {
+		name := f.Name()
+		if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+			continue
+		}
+
+		relativePath := filepath.Join(path, name)
+		if f.IsDir() {
+			b.WriteString(indent + "- " + name + "/\n")
+			listFilesRecursive(root, relativePath, indent+"  ", b)
+		} else {
+			b.WriteString(indent + "- " + name + "\n")
+		}
+	}
+}
 
 // InitContext loads system message files
 // This should be called once at startup for each LLM provider

@@ -553,7 +553,6 @@ func initializeTools(toolsFlag string, config *Config) {
 }
 
 func main() {
-	// Parse command line flags
 	quietFlag := flag.Bool("q", false, "Run in simple mode with a single prompt")
 	nonInteractiveFlag := flag.Bool("n", false, "Run in non-interactive mode")
 	configFlag := flag.String("p", "~/.config/aicode/config.yml", "Profile/config file")
