@@ -10,7 +10,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // formatTokenCount converts token counts to a more readable format
@@ -97,10 +99,10 @@ type toolExecutingMsg struct {
 // Bubbletea model for interactive mode
 type chatModel struct {
 	textarea     textarea.Model
+	viewport     viewport.Model
 	llm          Llm
 	config       Config
 	outputs      []string
-	scrollOffset int
 	windowHeight int
 	err          error
 	processing   bool
@@ -114,16 +116,37 @@ func initialChatModel(llm Llm, config Config) chatModel {
 	ta.CharLimit = 0
 	ta.ShowLineNumbers = false
 	ta.SetHeight(4)
+
 	outputs := llm.GetFormattedHistory()
-	return chatModel{
+
+	// Initialize viewport
+	vp := viewport.New(80, 20)
+	vp.Style = lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder())
+
+	// Create model
+	model := chatModel{
 		textarea:     ta,
+		viewport:     vp,
 		llm:          llm,
 		config:       config,
 		outputs:      outputs,
-		scrollOffset: 0,
 		windowHeight: 0,
 		processing:   false,
 	}
+
+	// Set initial viewport content
+	initialContent := ""
+	for i, output := range outputs {
+		initialContent += output
+		// Add blank line between messages
+		if i < len(outputs)-1 {
+			initialContent += "\n\n"
+		}
+	}
+	vp.SetContent(initialContent)
+	vp.GotoBottom()
+
+	return model
 }
 
 func (m chatModel) Init() tea.Cmd {
@@ -133,16 +156,25 @@ func (m chatModel) Init() tea.Cmd {
 // Function removed since it was unused
 
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
+
 	switch msg := msg.(type) {
 	case toolExecutingMsg:
 		m.outputs = append(m.outputs, fmt.Sprintf("%s(%s)", msg.toolName, msg.params))
+		m.updateViewportContent()
 		return m, nil
 	case updateResultMsg:
 		// Handle the update from our async processing
 		m.outputs = msg.outputs
 		m.err = msg.err
 		m.processing = false
-		m.scrollOffset = 0
+		m.updateViewportContent()
+
+		// Scroll viewport to the bottom to show latest content
+		m.viewport.GotoBottom()
 		return m, nil
 	case tea.KeyMsg:
 		switch {
@@ -165,7 +197,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					triggerMsg := "Command /clear triggered"
 					m.outputs = append(m.outputs, triggerMsg)
 					m.textarea.Reset()
-					m.scrollOffset = 0
+					m.updateViewportContent()
 					return m, nil
 				} else if trimmedInput == "/cost" {
 					var price float64
@@ -183,7 +215,8 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					msg := fmt.Sprintf("Tokens: %s input, %s output. Cost: $%.2f", inputDisplay, outputDisplay, price)
 					m.outputs = append(m.outputs, msg)
 					m.textarea.Reset()
-					m.scrollOffset = 0
+					m.updateViewportContent()
+					m.viewport.GotoBottom()
 					return m, nil
 				} else if trimmedInput == "/init" {
 					input = initPrompt
@@ -196,7 +229,8 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Add a processing message to the display
 				m.outputs = append(m.outputs, "> "+input)
 				m.outputs = append(m.outputs, "Thinking...")
-				m.scrollOffset = 0
+				m.updateViewportContent()
+				m.viewport.GotoBottom()
 
 				// Store a copy of the model for the goroutine to use
 				llm := m.llm
@@ -249,55 +283,71 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				return m, nil
 			}
-		case msg.String() == "up":
-			maxScroll := m.getMaxScroll()
-			if m.scrollOffset < maxScroll {
-				m.scrollOffset++
-			}
-			return m, nil
-		case msg.String() == "down":
-			if m.scrollOffset > 0 {
-				m.scrollOffset--
-			}
-			return m, nil
+		// Handle viewport scrolling
+		case msg.String() == "up" || msg.String() == "k":
+			m.viewport, cmd = m.viewport.Update(msg)
+			cmds = append(cmds, cmd)
+		case msg.String() == "down" || msg.String() == "j":
+			m.viewport, cmd = m.viewport.Update(msg)
+			cmds = append(cmds, cmd)
 		case msg.String() == "pgup":
-			maxScroll := m.getMaxScroll()
-			if m.scrollOffset+5 < maxScroll {
-				m.scrollOffset += 5
-			} else {
-				m.scrollOffset = maxScroll
-			}
-			return m, nil
+			m.viewport, cmd = m.viewport.Update(msg)
+			cmds = append(cmds, cmd)
 		case msg.String() == "pgdown":
-			if m.scrollOffset-5 > 0 {
-				m.scrollOffset -= 5
-			} else {
-				m.scrollOffset = 0
-			}
-			return m, nil
-		case (msg.Type == tea.KeyCtrlD):
-			if m.scrollOffset-10 > 0 {
-				m.scrollOffset -= 10
-			} else {
-				m.scrollOffset = 0
-			}
-			return m, nil
-		case (msg.Type == tea.KeyCtrlU):
-			maxScroll := m.getMaxScroll()
-			if m.scrollOffset+10 < maxScroll {
-				m.scrollOffset += 10
-			} else {
-				m.scrollOffset = maxScroll
-			}
-			return m, nil
+			m.viewport, cmd = m.viewport.Update(msg)
+			cmds = append(cmds, cmd)
+		case msg.Type == tea.KeyHome:
+			m.viewport.GotoTop()
+		case msg.Type == tea.KeyEnd:
+			m.viewport.GotoBottom()
 		}
 	case tea.WindowSizeMsg:
+		// Calculate height for the viewport based on window size
+		headerHeight := 1 // Title
+		footerHeight := 6 // Textarea (4) + status (1) + padding (1)
+
+		viewportHeight := msg.Height - headerHeight - footerHeight
+		if viewportHeight < 1 {
+			viewportHeight = 1
+		}
+
+		m.viewport.Width = msg.Width - 4
+		m.viewport.Height = viewportHeight
+
+		// Update textarea width
 		m.textarea.SetWidth(msg.Width - 4)
+
 		m.windowHeight = msg.Height
+
+		// Update content after resize
+		m.updateViewportContent()
 	}
-	var cmd tea.Cmd
+
+	// Update both components
 	m.textarea, cmd = m.textarea.Update(msg)
-	return m, cmd
+	cmds = append(cmds, cmd)
+
+	m.viewport, cmd = m.viewport.Update(msg)
+	cmds = append(cmds, cmd)
+
+	return m, tea.Batch(cmds...)
+}
+
+// Update the viewport content based on current outputs
+func (m *chatModel) updateViewportContent() {
+	content := ""
+
+	// Concatenate all outputs with a blank line between them
+	for i, output := range m.outputs {
+		content += output
+		// Add blank line between messages
+		if i < len(m.outputs)-1 {
+			content += "\n\n"
+		}
+	}
+
+	m.viewport.SetContent(content)
+	m.viewport.GotoBottom()
 }
 
 func (m chatModel) getMaxScroll() int {
@@ -343,46 +393,55 @@ func splitLines(s string) []string {
 }
 
 func (m chatModel) View() string {
-	var view string
-	lines := m.getOutputLines()
-	historyHeight := m.getHistoryHeight()
-	maxScroll := m.getMaxScroll()
-	scrollOffset := m.scrollOffset
-	if scrollOffset > maxScroll {
-		scrollOffset = maxScroll
-	}
-	if scrollOffset < 0 {
-		scrollOffset = 0
-	}
-	start := 0
-	if len(lines) > historyHeight {
-		start = len(lines) - historyHeight - scrollOffset
-		if start < 0 {
-			start = 0
-		}
-	}
-	end := start + historyHeight
-	if end > len(lines) {
-		end = len(lines)
-	}
-	for _, line := range lines[start:end] {
-		view += line + "\n"
-	}
-	view += m.textarea.View()
+	// Title style
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("170")).
+		Bold(true).
+		PaddingLeft(2)
 
-	// Show status information
-	statusInfo := ""
-	if maxScroll > 0 {
-		statusInfo += fmt.Sprintf("[Scroll: %d/%d]", scrollOffset, maxScroll)
-	}
-	if statusInfo != "" {
-		view += fmt.Sprintf("\n%s", statusInfo)
+	// Status line style
+	statusStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Italic(true)
+
+	// Error style
+	errorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("9")).
+		Bold(true)
+
+	// Create title with scroll information
+	title := titleStyle.Render("Chat History")
+
+	// Render viewport content
+	contentView := m.viewport.View()
+
+	// Render textarea input
+	inputView := m.textarea.View()
+
+	// Render status line
+	statusLine := ""
+	if m.viewport.TotalLineCount() > 0 {
+		statusLine = statusStyle.Render(fmt.Sprintf("Lines: %d/%d",
+			m.viewport.VisibleLineCount(),
+			m.viewport.TotalLineCount()))
 	}
 
+	// Add error message if needed
 	if m.err != nil {
-		view += fmt.Sprintf("\nError: %v", m.err)
+		statusLine += " " + errorStyle.Render(fmt.Sprintf("Error: %v", m.err))
 	}
-	return view
+
+	// Add processing indicator if needed
+	if m.processing {
+		statusLine += " " + statusStyle.Render("[Processing...]")
+	}
+
+	// Combine all elements
+	return fmt.Sprintf("%s\n%s\n\n%s\n%s",
+		title,
+		contentView,
+		inputView,
+		statusLine)
 }
 
 // This function was removed as each LLM now implements GetFormattedHistory()
