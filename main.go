@@ -153,8 +153,6 @@ func (m chatModel) Init() tea.Cmd {
 	return textarea.Blink
 }
 
-// Function removed since it was unused
-
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		cmd  tea.Cmd
@@ -339,7 +337,9 @@ func (m *chatModel) updateViewportContent() {
 
 	// Concatenate all outputs with a blank line between them
 	for i, output := range m.outputs {
-		content += output
+		// Wrap long lines to fit viewport width
+		wrappedOutput := wrapText(output, m.viewport.Width)
+		content += wrappedOutput
 		// Add blank line between messages
 		if i < len(m.outputs)-1 {
 			content += "\n\n"
@@ -350,46 +350,48 @@ func (m *chatModel) updateViewportContent() {
 	m.viewport.GotoBottom()
 }
 
-func (m chatModel) getMaxScroll() int {
-	lines := m.getOutputLines()
-	usableHeight := m.getHistoryHeight()
-	if len(lines) > usableHeight {
-		return len(lines) - usableHeight
+// wrapText wraps long lines to fit within the specified width
+func wrapText(text string, width int) string {
+	if width <= 0 {
+		return text
 	}
-	return 0
-}
 
-func (m chatModel) getOutputLines() []string {
-	var lines []string
-	for _, output := range m.outputs {
-		entry := fmt.Sprintf("%s\n", output)
-		lines = append(lines, splitLines(entry)...)
-		lines = append(lines, "")
-	}
-	return lines
-}
+	var result strings.Builder
+	lines := strings.Split(text, "\n")
 
-func (m chatModel) getHistoryHeight() int {
-	taLines := m.textarea.LineCount() + 2
-	if m.windowHeight > taLines+1 {
-		return m.windowHeight - taLines - 1
-	}
-	return 0
-}
+	for i, line := range lines {
+		if len(line) <= width {
+			result.WriteString(line)
+		} else {
+			// Process the line in chunks of width characters
+			for len(line) > 0 {
+				if len(line) <= width {
+					result.WriteString(line)
+					line = ""
+				} else {
+					// Find the last space before width
+					lastSpace := strings.LastIndex(line[:width], " ")
+					if lastSpace == -1 || lastSpace == 0 {
+						// No space found or space at beginning, just cut at width
+						result.WriteString(line[:width])
+						line = line[width:]
+					} else {
+						// Cut at the last space
+						result.WriteString(line[:lastSpace])
+						line = line[lastSpace+1:] // Skip the space
+					}
+					result.WriteString("\n")
+				}
+			}
+		}
 
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i, c := range s {
-		if c == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
+		// Add newline between original lines (but not after the last line)
+		if i < len(lines)-1 {
+			result.WriteString("\n")
 		}
 	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
+
+	return result.String()
 }
 
 func (m chatModel) View() string {
@@ -443,8 +445,6 @@ func (m chatModel) View() string {
 		inputView,
 		statusLine)
 }
-
-// This function was removed as each LLM now implements GetFormattedHistory()
 
 // Global reference to the running program, used for async updates
 var programRef *tea.Program
