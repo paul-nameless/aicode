@@ -189,7 +189,9 @@ func (o *OpenAI) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 
 	// Accumulate token usage
 	o.InputTokens += out.Usage.PromptTokens
+	o.TotalInputTokens += out.Usage.PromptTokens
 	o.OutputTokens += out.Usage.CompletionTokens
+	o.TotalOutputTokens += out.Usage.CompletionTokens
 
 	// Convert to our unified response format
 	response := InferenceResponse{
@@ -243,6 +245,8 @@ func (o *OpenAI) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 // OpenAI struct implements Llm interface
 type OpenAI struct {
 	Model                 string
+	TotalInputTokens      int             // Track total input tokens used
+	TotalOutputTokens     int             // Track total output tokens used
 	InputTokens           int             // Track total input tokens used
 	OutputTokens          int             // Track total output tokens used
 	InputPricePerMillion  float64         // Price per million input tokens
@@ -399,8 +403,8 @@ func (o *OpenAI) summarizeConversation() error {
 
 // CalculatePrice calculates the price for OpenAI API usage
 func (o *OpenAI) CalculatePrice() float64 {
-	inputPrice := float64(o.InputTokens) * o.InputPricePerMillion / 1000000.0
-	outputPrice := float64(o.OutputTokens) * o.OutputPricePerMillion / 1000000.0
+	inputPrice := float64(o.TotalInputTokens) * o.InputPricePerMillion / 1000000.0
+	outputPrice := float64(o.TotalOutputTokens) * o.OutputPricePerMillion / 1000000.0
 	return inputPrice + outputPrice
 }
 

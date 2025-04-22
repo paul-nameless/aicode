@@ -193,7 +193,9 @@ func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 
 	// Accumulate token usage
 	c.InputTokens += out.Usage.InputTokens
+	c.TotalInputTokens += out.Usage.InputTokens
 	c.OutputTokens += out.Usage.OutputTokens
+	c.TotalOutputTokens += out.Usage.OutputTokens
 
 	// Process the response into our unified format and build our response
 	response := InferenceResponse{
@@ -248,6 +250,8 @@ func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 // Claude struct implements Llm interface
 type Claude struct {
 	Model                 string
+	TotalInputTokens      int             // Track total input tokens used
+	TotalOutputTokens     int             // Track total output tokens used
 	InputTokens           int             // Track total input tokens used
 	OutputTokens          int             // Track total output tokens used
 	InputPricePerMillion  float64         // Price per million input tokens
@@ -493,8 +497,8 @@ func (c *Claude) summarizeConversation() error {
 
 // CalculatePrice calculates the price for Claude API usage
 func (c *Claude) CalculatePrice() float64 {
-	inputPrice := float64(c.InputTokens) * c.InputPricePerMillion / 1000000.0
-	outputPrice := float64(c.OutputTokens) * c.OutputPricePerMillion / 1000000.0
+	inputPrice := float64(c.TotalInputTokens) * c.InputPricePerMillion / 1000000.0
+	outputPrice := float64(c.TotalOutputTokens) * c.OutputPricePerMillion / 1000000.0
 	return inputPrice + outputPrice
 }
 
