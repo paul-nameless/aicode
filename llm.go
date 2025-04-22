@@ -86,18 +86,17 @@ func GetSystemPrompt(config Config) string {
 	// Current branch: better-input
 
 	// Main branch (you will usually use this for PRs):
-
-	// Status:
-	// (clean)
-
-	// Recent commits:
-	// 91bc1ad Add tool execution status updates and messaging support for async UI feedback
-	// 4e5831f Update task dependencies to include formatting step in the lint process
-	// 7202ebd Fix lint
-	// 0f61995 Ignore configs directory in gitignore
-	// 6658216 Add readme.md file</context>
+	// git status
+	// git log -4
 	// `)
 
+	for _, fname := range config.SystemFiles {
+		if content, err := os.ReadFile(fname); err == nil {
+			b.WriteString("\nContents of " + fname + "\n\n")
+			b.WriteString(string(content))
+			b.WriteString("\n\n")
+		}
+	}
 	return b.String()
 }
 
@@ -133,16 +132,4 @@ func listFilesRecursive(root, path, indent string, b *strings.Builder) {
 			b.WriteString(indent + "- " + name + "\n")
 		}
 	}
-}
-
-// InitContext loads system message files
-// This should be called once at startup for each LLM provider
-func InitContext(llm Llm) error {
-	for _, fname := range []string{"AI.md", "CLAUDE.md"} {
-		if content, err := os.ReadFile(fname); err == nil {
-			llm.AddMessage(string(content), "user")
-		}
-	}
-
-	return nil
 }

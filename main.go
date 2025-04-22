@@ -601,11 +601,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize context and load system prompts
-	if err := InitContext(llm); err != nil {
-		slog.Warn("Failed to initialize context", "error", err)
-	}
-
 	if config.NonInteractive {
 		initialPrompt := config.InitialPrompt
 		args := flag.Args()

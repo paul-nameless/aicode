@@ -19,6 +19,7 @@ type Config struct {
 	Debug          bool     `yaml:"debug"`
 	Quiet          bool     `yaml:"quiet"`
 	EnabledTools   []string `yaml:"enabled_tools"`
+	SystemFiles    []string `yaml:"system_files"`
 }
 
 // LoadConfig loads configuration from a YAML file
@@ -29,6 +30,7 @@ func LoadConfig(configPath string) (Config, error) {
 	config.Model = "gpt-4.1-nano"
 	config.Debug = false
 	config.NonInteractive = false
+	config.SystemFiles = []string{"AI.md", "CLAUDE.md"}
 
 	// If config file doesn't exist, return default config
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
