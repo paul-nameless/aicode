@@ -88,24 +88,8 @@ func LoadClaudeContext() error {
 func loadClaudeTools() ([]claudeTool, error) {
 	var toolsList []claudeTool
 
-	// Map of tool names to their schema constants and descriptions
-	toolData := map[string]struct {
-		Schema      string
-		Description string
-	}{
-		"View":          {ViewToolSchema, ViewToolDescription},
-		"Replace":       {ReplaceToolSchema, ReplaceToolDescription},
-		"Edit":          {EditToolSchema, EditToolDescription},
-		"Bash":          {BashToolSchema, BashToolDescription},
-		"Ls":            {LsToolSchema, LsToolDescription},
-		"FindFiles":     {FindFilesSchema, FindFilesDescription},
-		"DispatchAgent": {DispatchAgentSchema, DispatchAgentDescription},
-		"Fetch":         {FetchToolSchema, FetchToolDescription},
-		"Grep":          {GrepSchema, GrepDescription},
-	}
-
 	// Process each tool
-	for toolName, toolInfo := range toolData {
+	for toolName, toolInfo := range ToolData {
 		// Parse the JSON schema
 		var toolSchema struct {
 			Name        string          `json:"name"`
@@ -113,22 +97,17 @@ func loadClaudeTools() ([]claudeTool, error) {
 			Parameters  json.RawMessage `json:"parameters"`
 		}
 
-		if err := json.Unmarshal([]byte(toolInfo.Schema), &toolSchema); err == nil {
-			// Successfully parsed the schema
-			toolsList = append(toolsList, claudeTool{
-				Name:        toolSchema.Name,
-				Description: toolInfo.Description, // Use the markdown description
-				InputSchema: toolSchema.Parameters,
-			})
-		} else {
-			fmt.Printf("Failed to parse JSON schema for tool %s: %v\n", toolName, err)
-
-			// Fallback to just using the name
-			toolsList = append(toolsList, claudeTool{
-				Name:        toolName,
-				Description: "Tool for " + toolName,
-			})
+		err := json.Unmarshal([]byte(toolInfo.Schema), &toolSchema)
+		if err != nil {
+			slog.Error("Failed to unmarshal tool schema", "tool", toolName, "error", err)
+			os.Exit(1)
 		}
+
+		toolsList = append(toolsList, claudeTool{
+			Name:        toolSchema.Name,
+			Description: toolInfo.Description, // Use the markdown description
+			InputSchema: toolSchema.Parameters,
+		})
 	}
 
 	if len(toolsList) >= 1 {

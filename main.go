@@ -399,28 +399,6 @@ func runInteractiveMode(llm Llm, config Config) {
 	}
 }
 
-// AllTools is a list of all available tools
-var AllTools = []string{
-	"Grep",
-	"GlobTool",
-	"FindFiles",
-	"Bash",
-	"Ls",
-	"View",
-	"Edit",
-	"Replace",
-	"Fetch",
-	"DispatchAgent",
-}
-
-// DefaultDispatchAgentTools is the list of tools available to DispatchAgent by default
-var DefaultDispatchAgentTools = []string{
-	"GlobTool",
-	"Grep",
-	"Ls",
-	"View",
-}
-
 // initLLM initializes the appropriate LLM provider based on configuration
 func initLLM(config Config) (Llm, error) {
 	var llm Llm
@@ -463,9 +441,12 @@ func initializeTools(toolsFlag string, config *Config) {
 	// If no tools flag is provided, use what's in config or enable all tools
 	if toolsFlag == "" {
 		// If config doesn't have enabled tools specified, enable all tools
+		// Dynamically enable all the tools from ToolData keys if toolsFlag is empty
 		if len(config.EnabledTools) == 0 {
-			config.EnabledTools = make([]string, len(AllTools))
-			copy(config.EnabledTools, AllTools)
+			config.EnabledTools = make([]string, len(ToolData))
+			for toolName := range ToolData {
+				config.EnabledTools = append(config.EnabledTools, toolName)
+			}
 		}
 		return
 	}
@@ -485,8 +466,9 @@ func initializeTools(toolsFlag string, config *Config) {
 
 		// Check if the tool is valid
 		validTool := false
-		for _, availableTool := range AllTools {
-			if tool == availableTool {
+
+		for toolName := range ToolData {
+			if tool == toolName {
 				validTool = true
 				break
 			}
@@ -502,8 +484,10 @@ func initializeTools(toolsFlag string, config *Config) {
 	// If no valid tools were provided, enable all tools
 	if len(config.EnabledTools) == 0 {
 		fmt.Fprintf(os.Stderr, "Warning: No valid tools specified, enabling all tools\n")
-		config.EnabledTools = make([]string, len(AllTools))
-		copy(config.EnabledTools, AllTools)
+		config.EnabledTools = make([]string, len(ToolData))
+		for toolName := range ToolData {
+			config.EnabledTools = append(config.EnabledTools, toolName)
+		}
 	}
 }
 

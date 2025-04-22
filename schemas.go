@@ -31,6 +31,12 @@ var FetchToolDescription string
 //go:embed tools/grep.md
 var GrepDescription string
 
+//go:embed tools/batch.md
+var BatchToolDescription string
+
+//go:embed tools/batch.json
+var BatchToolSchema string
+
 //go:embed tools/view.json
 var ViewToolSchema string
 

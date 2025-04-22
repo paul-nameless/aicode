@@ -1,0 +1,36 @@
+{
+  "name": "Batch",
+  "description": "This is a tool for editing files. For moving or renaming files, use Bash with mv. For larger edits, use Replace.",
+  "parameters": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "description": "A short (3-5 word) description of the batch operation",
+        "type": "string"
+      },
+      "invocations": {
+        "description": "The list of tool invocations to execute (required -- you MUST provide at least one tool invocation)",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "input": {
+              "additionalProperties": {},
+              "description": "The input to pass to the tool",
+              "type": "object"
+            },
+            "tool_name": {
+              "description": "The name of the tool to invoke",
+              "type": "string"
+            }
+          },
+          "required": ["tool_name", "input"],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": ["description", "invocations"],
+    "type": "object"
+  }
+}

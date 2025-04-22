@@ -44,6 +44,30 @@ type LsToolParams struct {
 	Ignore []string `json:"ignore,omitempty"`
 }
 
+var ToolData = map[string]struct {
+	Schema      string
+	Description string
+}{
+	"View":          {ViewToolSchema, ViewToolDescription},
+	"Replace":       {ReplaceToolSchema, ReplaceToolDescription},
+	"Edit":          {EditToolSchema, EditToolDescription},
+	"Bash":          {BashToolSchema, BashToolDescription},
+	"Ls":            {LsToolSchema, LsToolDescription},
+	"FindFiles":     {FindFilesSchema, FindFilesDescription},
+	"DispatchAgent": {DispatchAgentSchema, DispatchAgentDescription},
+	"Fetch":         {FetchToolSchema, FetchToolDescription},
+	"Grep":          {GrepSchema, GrepDescription},
+	"Batch":         {BatchToolSchema, BatchToolDescription},
+}
+
+// DefaultDispatchAgentTools is the list of tools available to DispatchAgent by default
+var DefaultDispatchAgentTools = []string{
+	"GlobTool",
+	"Grep",
+	"Ls",
+	"View",
+}
+
 func parseToolParams[T any](paramsJSON json.RawMessage, simpleStringField string) (T, error) {
 	var params T
 
@@ -244,6 +268,11 @@ func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []
 			result, err = ExecuteDispatchAgentTool(toolCall.Input)
 			if err != nil {
 				result = fmt.Sprintf("Error executing DispatchAgent: %v", err)
+			}
+		case "Batch":
+			result, err = ExecuteBatchTool(toolCall.Input, config)
+			if err != nil {
+				result = fmt.Sprintf("Error executing Batch: %v", err)
 			}
 		default:
 			// For now, other tools aren't implemented yet
@@ -650,6 +679,63 @@ type DispatchAgentToolParams struct {
 
 // ExecuteDispatchAgentTool launches a new instance of this application with the same configuration
 // to process a prompt and return the summarized response
+type BatchInvocation struct {
+	ToolName string                 `json:"tool_name"`
+	Input    map[string]interface{} `json:"input"`
+}
+
+type BatchToolParams struct {
+	Description string            `json:"description"`
+	Invocations []BatchInvocation `json:"invocations"`
+}
+
+func ExecuteBatchTool(paramsJSON json.RawMessage, config Config) (string, error) {
+	params, err := parseToolParams[BatchToolParams](paramsJSON, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to parse batch tool parameters: %v", err)
+	}
+	if len(params.Invocations) == 0 {
+		return "", fmt.Errorf("at least one invocation required")
+	}
+	results := make([]string, len(params.Invocations))
+	for i, inv := range params.Invocations {
+		inputJson, err := json.Marshal(inv.Input)
+		if err != nil {
+			results[i] = fmt.Sprintf("error marshaling input: %v", err)
+			continue
+		}
+		var toolResult string
+		switch inv.ToolName {
+		case "Grep":
+			toolResult, err = ExecuteGrep(inputJson)
+		case "FindFiles":
+			toolResult, err = ExecuteFindFiles(inputJson)
+		case "Bash":
+			toolResult, err = ExecuteBashTool(inputJson)
+		case "Ls":
+			toolResult, err = ExecuteLsTool(inputJson)
+		case "View":
+			toolResult, err = ExecuteViewTool(inputJson)
+		case "Edit":
+			toolResult, err = ExecuteEditTool(inputJson)
+		case "Replace":
+			toolResult, err = ExecuteReplaceTool(inputJson)
+		case "Fetch":
+			toolResult, err = ExecuteFetchTool(inputJson)
+		case "DispatchAgent":
+			toolResult, err = ExecuteDispatchAgentTool(inputJson)
+		default:
+			toolResult = "tool not implemented"
+		}
+		if err != nil {
+			results[i] = fmt.Sprintf("%s: %v", inv.ToolName, err)
+		} else {
+			results[i] = fmt.Sprintf("%s: %s", inv.ToolName, toolResult)
+		}
+	}
+	return strings.Join(results, "\n"), nil
+}
+
 func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
 	params, err := parseToolParams[DispatchAgentToolParams](paramsJSON, "Prompt")
 	if err != nil {
