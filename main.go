@@ -185,6 +185,8 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.textarea.Reset()
 					m.scrollOffset = 0
 					return m, nil
+				} else if trimmedInput == "/init" {
+					input = initPrompt
 				}
 
 				// Mark as processing
