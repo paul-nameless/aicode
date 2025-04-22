@@ -149,7 +149,7 @@ func ExecuteGrep(paramsJSON json.RawMessage) (string, error) {
 	rgCmd = strings.ReplaceAll(rgCmd, "\t", "")
 
 	// Execute the ripgrep command
-	result, _ := executeCommand(rgCmd)
+	result, _ := ExecuteCommand(rgCmd)
 	return result, nil
 }
 
@@ -296,7 +296,9 @@ func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []
 	return toolResponse.String(), results, nil
 }
 
-func executeCommand(command string) (string, error) {
+// ExecuteCommand runs a shell command and returns the output as a string
+// This is exported for use in other files
+func ExecuteCommand(command string) (string, error) {
 	// Create a command to execute the bash command
 	cmd := exec.Command("bash", "-c", command)
 
@@ -345,7 +347,7 @@ func ExecuteFindFiles(paramsJSON json.RawMessage) (string, error) {
 		escapedPattern, escapedPath)
 
 	// Execute the command
-	result, err := executeCommand(cmd)
+	result, err := ExecuteCommand(cmd)
 	if err != nil {
 		return "", fmt.Errorf("error executing glob command: %v", err)
 	}
@@ -406,7 +408,7 @@ func ExecuteLsTool(paramsJSON json.RawMessage) (string, error) {
 	}
 
 	// Execute the command
-	result, err := executeCommand(lsCmd)
+	result, err := ExecuteCommand(lsCmd)
 	if err != nil {
 		return "", fmt.Errorf("error executing ls command: %v", err)
 	}
@@ -432,7 +434,7 @@ func ExecuteBashTool(paramsJSON json.RawMessage) (string, error) {
 	}
 
 	// Execute the command using the extracted function
-	return executeCommand(params.Command)
+	return ExecuteCommand(params.Command)
 }
 
 // ViewToolParams represents the parameters for the ViewTool
@@ -492,7 +494,7 @@ func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
 	}
 
 	// Execute the command
-	result, err := executeCommand(cmd)
+	result, err := ExecuteCommand(cmd)
 	if err != nil {
 		return "", fmt.Errorf("error reading file: %v", err)
 	}
@@ -536,7 +538,7 @@ func ExecuteFetchTool(paramsJSON json.RawMessage) (string, error) {
 	curlCmd += fmt.Sprintf(" '%s'", strings.ReplaceAll(params.URL, "'", "'\\''"))
 
 	// Execute the curl command
-	result, err := executeCommand(curlCmd)
+	result, err := ExecuteCommand(curlCmd)
 	if err != nil {
 		return "", fmt.Errorf("error executing fetch command: %v", err)
 	}

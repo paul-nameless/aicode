@@ -82,13 +82,32 @@ func GetSystemPrompt(config Config) string {
 	b.WriteString(listProjectFiles())
 	b.WriteString("</context>\n")
 
-	// 	b.WriteString(`<context name="gitStatus">This is the git status at the start of the conversation. Note that this status is a snapshot in time, and will not update during the conversation.
-	// Current branch: better-input
+	// Add git status if available
+	gitCurrentBranch, err := ExecuteCommand("git branch --show-current")
+	if err == nil && gitCurrentBranch != "" {
+		b.WriteString(`<context name="gitStatus">This is the git status at the start of the conversation. Note that this status is a snapshot in time, and will not update during the conversation.` + "\n")
+		b.WriteString("Current branch: " + strings.TrimSpace(gitCurrentBranch) + "\n")
 
-	// Main branch (you will usually use this for PRs):
-	// git status
-	// git log -4
-	// `)
+		// Get main/master branch
+		gitMainBranch, err := ExecuteCommand("git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'")
+		if err == nil && gitMainBranch != "" {
+			b.WriteString("Main branch (you will usually use this for PRs): " + strings.TrimSpace(gitMainBranch) + "\n")
+		}
+
+		// Get git status
+		gitStatus, err := ExecuteCommand("git status")
+		if err == nil {
+			b.WriteString(gitStatus + "\n")
+		}
+
+		// Get recent commits
+		gitLog, err := ExecuteCommand("git log --oneline -4")
+		if err == nil {
+			b.WriteString(gitLog + "\n")
+		}
+
+		b.WriteString("</context>\n")
+	}
 
 	for _, fname := range config.SystemFiles {
 		if content, err := os.ReadFile(fname); err == nil {
