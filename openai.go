@@ -530,7 +530,7 @@ func (o *OpenAI) Init(config Config) error {
 	// Add system prompt as the first message
 	o.conversationHistory = append(o.conversationHistory, openaiMessage{
 		Role:    "system",
-		Content: defaultSystemPrompt,
+		Content: GetSystemPrompt(config),
 		Type:    "text",
 	})
 

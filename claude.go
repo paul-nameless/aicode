@@ -621,7 +621,7 @@ func NewClaude(config Config) *Claude {
 		systemMessages: []claudeSystemMessage{
 			{
 				Type:         "text",
-				Text:         defaultSystemPrompt,
+				Text:         GetSystemPrompt(config),
 				CacheControl: &claudeCacheControl{Type: "ephemeral"},
 			},
 		},
