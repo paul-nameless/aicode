@@ -356,30 +356,8 @@ func (c *Claude) summarizeConversation() error {
 		}
 	}
 
-	// First attempt: Try to extract structured summary if it exists
-	if strings.Contains(summaryText, "<summary>") && strings.Contains(summaryText, "</summary>") {
-		startIndex := strings.Index(summaryText, "<summary>") + len("<summary>")
-		endIndex := strings.Index(summaryText, "</summary>")
-		if startIndex > 0 && endIndex > startIndex {
-			summaryText = summaryText[startIndex:endIndex]
-		}
-	} else if strings.Contains(summaryText, "CONVERSATION SUMMARY:") && strings.Contains(summaryText, "END OF SUMMARY") {
-		// Second attempt: Try to extract summary using alternative format
-		startIndex := strings.Index(summaryText, "CONVERSATION SUMMARY:") + len("CONVERSATION SUMMARY:")
-		endIndex := strings.Index(summaryText, "END OF SUMMARY")
-		if startIndex > 0 && endIndex > startIndex {
-			summaryText = summaryText[startIndex:endIndex]
-		}
-	}
-
 	// Clean up any extra whitespace and ensure the summary is not empty
 	summaryText = strings.TrimSpace(summaryText)
-
-	// If we still don't have a summary, use the whole response as a fallback
-	if summaryText == "" {
-		summaryText = "Summary of conversation: " + out.Content[0].Text
-		summaryText = strings.TrimSpace(summaryText)
-	}
 
 	if summaryText == "" {
 		return errors.New("received empty summary")
@@ -388,7 +366,7 @@ func (c *Claude) summarizeConversation() error {
 	// Replace conversation history with system message, summary, and last messages
 	newConversation := []claudeMessage{
 		// Keep the system message (should be the first one)
-		c.conversationHistory[0],
+		// c.conversationHistory[0],
 		// Add summary as assistant message
 		{
 			Role:    "assistant",

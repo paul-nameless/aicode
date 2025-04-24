@@ -347,9 +347,11 @@ func (o *OpenAI) summarizeConversation() error {
 
 	// Replace the conversation history with just the system message, summary and recent messages
 	newHistory := []openaiMessage{
-		// Keep the system prompt that should be first in the list
-		o.conversationHistory[0],
-		// Add summary as assistant message
+		{
+			Role:    "system",
+			Content: GetSystemPrompt(o.Config),
+			Type:    "text",
+		},
 		{
 			Role:    "assistant",
 			Content: summaryText,
