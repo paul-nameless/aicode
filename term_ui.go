@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -33,14 +34,16 @@ var commands = map[string]string{
 
 // Bubbletea model for interactive mode
 type chatModel struct {
-	textarea     textarea.Model
-	viewport     viewport.Model
-	llm          Llm
-	config       Config
-	outputs      []string
-	windowHeight int
-	err          error
-	processing   bool
+	textarea          textarea.Model
+	viewport          viewport.Model
+	llm               Llm
+	config            Config
+	outputs           []string
+	windowHeight      int
+	err               error
+	processing        bool
+	lastExitKeypress  tea.KeyType
+	lastExitTimestamp int64
 }
 
 func initialChatModel(llm Llm, config Config) chatModel {
@@ -60,13 +63,15 @@ func initialChatModel(llm Llm, config Config) chatModel {
 
 	// Create model
 	model := chatModel{
-		textarea:     ta,
-		viewport:     vp,
-		llm:          llm,
-		config:       config,
-		outputs:      outputs,
-		windowHeight: 0,
-		processing:   false,
+		textarea:          ta,
+		viewport:          vp,
+		llm:               llm,
+		config:            config,
+		outputs:           outputs,
+		windowHeight:      0,
+		processing:        false,
+		lastExitKeypress:  0,
+		lastExitTimestamp: 0,
 	}
 
 	// Set initial viewport content
@@ -116,7 +121,27 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.InsertString("\n")
 			return m, nil
 		case msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyCtrlD:
-			return m, tea.Quit
+			now := time.Now().UnixNano()
+			// Check if this is the second press of the same key within 2 seconds
+			if m.lastExitKeypress == msg.Type && (now-m.lastExitTimestamp) < int64(2*time.Second) {
+				return m, tea.Quit
+			}
+			// Update the last exit keypress and timestamp
+			m.lastExitKeypress = msg.Type
+			m.lastExitTimestamp = now
+
+			// Notify user about the exit process
+			statusMsg := "Press Ctrl+"
+			if msg.Type == tea.KeyCtrlC {
+				statusMsg += "C"
+			} else {
+				statusMsg += "D"
+			}
+			statusMsg += " again to exit"
+			m.outputs = append(m.outputs, statusMsg)
+			m.updateViewportContent()
+			m.viewport.GotoBottom()
+			return m, nil
 		case msg.Type == tea.KeyEnter:
 			// If we're already processing, ignore the input
 			if m.processing {
