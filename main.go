@@ -160,7 +160,6 @@ func main() {
 		slog.Error("Failed to load configuration", "error", err)
 		os.Exit(1)
 	}
-	fmt.Printf("%v\n", config)
 
 	// Set config.Quiet to CLI flag if present
 	config.Quiet = config.Quiet || *quietFlag
