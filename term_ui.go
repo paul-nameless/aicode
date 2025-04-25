@@ -351,6 +351,11 @@ func (m chatModel) View() string {
 		Foreground(lipgloss.Color("240")).
 		Italic(true)
 
+	// Token info style
+	tokenStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("39")).
+		Italic(true)
+
 	// Error style
 	errorStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("9")).
@@ -373,6 +378,12 @@ func (m chatModel) View() string {
 			m.viewport.TotalLineCount()))
 	}
 
+	// Add token usage and cost
+	tokenInfo := getTokenInfoString(m.llm)
+	if tokenInfo != "" {
+		statusLine += " " + tokenStyle.Render(tokenInfo)
+	}
+
 	// Add error message if needed
 	if m.err != nil {
 		statusLine += " " + errorStyle.Render(fmt.Sprintf("Error: %v", m.err))
@@ -389,6 +400,32 @@ func (m chatModel) View() string {
 		contentView,
 		inputView,
 		statusLine)
+}
+
+// getTokenInfoString returns a formatted string with token usage and cost information
+func getTokenInfoString(llm Llm) string {
+	var price float64
+	var inputTokens, outputTokens int
+	
+	switch provider := llm.(type) {
+	case *Claude:
+		price = provider.CalculatePrice()
+		inputTokens = provider.InputTokens
+		outputTokens = provider.OutputTokens
+	case *OpenAI:
+		price = provider.CalculatePrice()
+		inputTokens = provider.InputTokens
+		outputTokens = provider.OutputTokens
+	}
+	
+	if inputTokens > 0 || outputTokens > 0 {
+		return fmt.Sprintf("Tokens: %s in, %s out | Cost: $%.4f", 
+			formatTokenCount(inputTokens), 
+			formatTokenCount(outputTokens), 
+			price)
+	}
+	
+	return ""
 }
 
 // Global reference to the running program, used for async updates
