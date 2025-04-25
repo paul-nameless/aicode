@@ -5,19 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/user"
-	"path/filepath"
 	"strings"
 )
-
-// formatTokenCount converts token counts to a more readable format
-// For counts >= 1000, it displays as X.Xk (e.g., 1500 → 1.5k)
-func formatTokenCount(count int) string {
-	if count >= 1000 {
-		return fmt.Sprintf("%.1fk", float64(count)/1000)
-	}
-	return fmt.Sprintf("%d", count)
-}
 
 // runSimpleMode processes a single prompt in non-interactive mode
 func runSimpleMode(prompt string, llm Llm, config Config) {
@@ -96,19 +85,6 @@ func initLLM(config Config) (Llm, error) {
 	}
 
 	return llm, nil
-}
-
-func expandHomeDir(path string) string {
-	if !strings.HasPrefix(path, "~") {
-		return path
-	}
-
-	usr, err := user.Current()
-	if err != nil {
-		return path // Return original path if we can't get user home
-	}
-
-	return filepath.Join(usr.HomeDir, path[1:])
 }
 
 // initializeTools sets up the enabled tools based on user input and updates the config
