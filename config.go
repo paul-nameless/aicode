@@ -20,16 +20,13 @@ type Config struct {
 	Quiet          bool     `yaml:"quiet"`
 	EnabledTools   []string `yaml:"enabled_tools"`
 	SystemFiles    []string `yaml:"system_files"`
+	BaseUrl        string   `yaml:"base_url"`
 }
 
 // LoadConfig loads configuration from a YAML file
 func LoadConfig(configPath string) (Config, error) {
 	config := Config{}
 
-	// Default values
-	config.Model = "gpt-4.1-nano"
-	config.Debug = false
-	config.NonInteractive = false
 	config.SystemFiles = []string{"AI.md", "CLAUDE.md"}
 
 	// If config file doesn't exist, return default config
@@ -55,6 +52,34 @@ func LoadConfig(configPath string) (Config, error) {
 			return config, errors.New("failed to get API key from shell command: " + err.Error())
 		}
 		config.ApiKey = strings.TrimSpace(aptiKey)
+	}
+
+	if envVal := os.Getenv("OPENAI_API_KEY"); envVal != "" {
+		config.ApiKey = envVal
+	} else if envVal := os.Getenv("ANTHROPIC_API_KEY"); envVal != "" {
+		config.ApiKey = envVal
+	}
+
+	if envVal := os.Getenv("OPENAI_MODEL"); envVal != "" {
+		config.Model = envVal
+	} else if envVal := os.Getenv("ANTHROPIC_MODEL"); envVal != "" {
+		config.Model = envVal
+	}
+
+	if config.Model == "" {
+		config.Model = "claude-3-7-sonnet-latest"
+		if os.Getenv("OPENAI_API_KEY") != "" {
+			config.Model = "gpt-4.1"
+		}
+	}
+
+	if config.BaseUrl == "" {
+		config.BaseUrl = os.Getenv("BASE_URL")
+	}
+
+	if config.ApiKey == "" || config.Model == "" {
+
+		return config, errors.New("API key and model are required")
 	}
 
 	return config, nil

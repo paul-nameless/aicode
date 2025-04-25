@@ -128,14 +128,14 @@ func (o *OpenAI) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 	}
 
 	// Get base URL from environment variable or use default
-	baseURL := os.Getenv("OPENAI_API_URL")
+	baseURL := o.Config.BaseUrl
 	if baseURL == "" {
 		baseURL = "https://api.openai.com"
 	}
 
 	url := baseURL + "/v1/chat/completions"
 	reqBody := openaiRequest{
-		Model:     o.Model,
+		Model:     o.Config.Model,
 		Messages:  o.conversationHistory,
 		Tools:     o.tools,
 		MaxTokens: 4000,
@@ -146,7 +146,7 @@ func (o *OpenAI) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 		return InferenceResponse{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+o.apiKey)
+	req.Header.Set("Authorization", "Bearer "+o.Config.ApiKey)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -252,7 +252,6 @@ type OpenAI struct {
 	InputPricePerMillion  float64         // Price per million input tokens
 	OutputPricePerMillion float64         // Price per million output tokens
 	Config                Config          // Configuration
-	apiKey                string          // API key for OpenAI API
 	ContextWindowSize     int             // Maximum context window size in tokens
 	conversationHistory   []openaiMessage // Internal conversation history
 	tools                 []openaiTool
@@ -298,7 +297,7 @@ func (o *OpenAI) summarizeConversation() error {
 	// Create a request to summarize the conversation
 	url := "https://api.openai.com/v1/chat/completions"
 	reqBody := openaiRequest{
-		Model:       o.Model,
+		Model:       o.Config.Model,
 		Messages:    summaryMessages,
 		MaxTokens:   4000,
 		Temperature: 0.2, // Lower temperature for more consistent summaries
@@ -312,7 +311,7 @@ func (o *OpenAI) summarizeConversation() error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+o.apiKey)
+	req.Header.Set("Authorization", "Bearer "+o.Config.ApiKey)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -439,7 +438,7 @@ func (o *OpenAI) AddToolResult(toolUseID string, result string) {
 // GetFormattedHistory returns the conversation history formatted for display
 func (o *OpenAI) GetFormattedHistory() []string {
 	var outputs []string
-	outputs = append(outputs, fmt.Sprintf("Model: %s", o.Model))
+	outputs = append(outputs, fmt.Sprintf("Model: %s", o.Config.Model))
 
 	for _, msg := range o.conversationHistory {
 		if msg.Role == "system" || msg.Content == "" {
@@ -468,19 +467,6 @@ func (o *OpenAI) GetFormattedHistory() []string {
 
 // NewOpenAI creates a new OpenAI provider
 func NewOpenAI(config Config) *OpenAI {
-	model := config.Model
-	if model == "" {
-		model = os.Getenv("OPENAI_MODEL")
-		if model == "" {
-			model = "gpt-4.1-nano"
-		}
-	}
-
-	apiKey := config.ApiKey
-	if apiKey == "" {
-		apiKey = os.Getenv("OPENAI_API_KEY")
-	}
-
 	conversationHistory := []openaiMessage{
 		{
 			Role:    "system",
@@ -493,8 +479,6 @@ func NewOpenAI(config Config) *OpenAI {
 
 	return &OpenAI{
 		Config:                config,
-		Model:                 model,
-		apiKey:                apiKey,
 		InputTokens:           0,
 		OutputTokens:          0,
 		InputPricePerMillion:  2,

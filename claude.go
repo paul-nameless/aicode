@@ -136,14 +136,14 @@ func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 	}
 
 	// Get base URL from environment variable or use default
-	baseURL := os.Getenv("ANTHROPIC_API_URL")
+	baseURL := c.Config.BaseUrl
 	if baseURL == "" {
 		baseURL = "https://api.anthropic.com"
 	}
 
 	url := baseURL + "/v1/messages"
 	reqBody := claudeRequest{
-		Model:     c.Model,
+		Model:     c.Config.Model,
 		Messages:  c.conversationHistory,
 		System:    c.systemMessages,
 		Tools:     c.tools,
@@ -158,7 +158,7 @@ func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", c.apiKey)
+	req.Header.Set("x-api-key", c.Config.ApiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -257,7 +257,6 @@ type Claude struct {
 	InputPricePerMillion  float64         // Price per million input tokens
 	OutputPricePerMillion float64         // Price per million output tokens
 	Config                Config          // Configuration
-	apiKey                string          // API key for Claude API
 	ContextWindowSize     int             // Maximum context window size in tokens
 	conversationHistory   []claudeMessage // Internal conversation history
 	systemMessages        []claudeSystemMessage
@@ -313,7 +312,7 @@ func (c *Claude) summarizeConversation() error {
 	// Create a request to summarize the conversation
 	url := "https://api.anthropic.com/v1/messages"
 	reqBody := claudeRequest{
-		Model:       c.Model,
+		Model:       c.Config.Model,
 		Messages:    summaryMessages,
 		System:      systemMessages,
 		MaxTokens:   20000,
@@ -328,7 +327,7 @@ func (c *Claude) summarizeConversation() error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", c.apiKey)
+	req.Header.Set("x-api-key", c.Config.ApiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -512,7 +511,7 @@ func (c *Claude) AddToolResult(toolUseID string, result string) {
 // GetFormattedHistory returns the conversation history formatted for display
 func (c *Claude) GetFormattedHistory() []string {
 	var outputs []string
-	outputs = append(outputs, fmt.Sprintf("Model: %s", c.Model))
+	outputs = append(outputs, fmt.Sprintf("Model: %s", c.Config.Model))
 
 	for _, msg := range c.conversationHistory {
 		role := msg.Role
@@ -547,19 +546,10 @@ func (c *Claude) GetFormattedHistory() []string {
 
 // NewClaude creates a new Claude provider
 func NewClaude(config Config) *Claude {
-	model := config.Model
-	if model == "" {
-		model = os.Getenv("ANTHROPIC_MODEL")
-	}
-	apiKey := config.ApiKey
-	if apiKey == "" {
-		apiKey = os.Getenv("ANTHROPIC_API_KEY")
-	}
 	tools := loadClaudeTools()
 
 	return &Claude{
-		apiKey:                apiKey,
-		Model:                 model,
+		Config:                config,
 		InputTokens:           0,
 		OutputTokens:          0,
 		InputPricePerMillion:  3.0,  // $3 per million input tokens

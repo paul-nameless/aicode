@@ -70,7 +70,7 @@ func initLLM(config Config) (Llm, error) {
 	var llm Llm
 
 	// Choose provider based on configuration or available API keys
-	if os.Getenv("ANTHROPIC_API_KEY") != "" || strings.HasPrefix(config.Model, "claude") {
+	if strings.HasPrefix(config.Model, "claude") {
 		llm = NewClaude(config)
 	} else {
 		llm = NewOpenAI(config)
@@ -157,8 +157,10 @@ func main() {
 	// Load configuration
 	config, err := LoadConfig(configPath)
 	if err != nil {
-		slog.Warn("Failed to load configuration", "error", err)
+		slog.Error("Failed to load configuration", "error", err)
+		os.Exit(1)
 	}
+	fmt.Printf("%v\n", config)
 
 	// Set config.Quiet to CLI flag if present
 	config.Quiet = config.Quiet || *quietFlag
