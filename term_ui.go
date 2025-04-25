@@ -23,6 +23,14 @@ type toolExecutingMsg struct {
 	params   string
 }
 
+// Map of available commands and their descriptions
+var commands = map[string]string{
+	"/help":  "Show available commands",
+	"/clear": "Clear conversation history",
+	"/cost":  "Display token usage and cost information",
+	"/init":  "Initialize with the system prompt",
+}
+
 // Bubbletea model for interactive mode
 type chatModel struct {
 	textarea     textarea.Model
@@ -118,7 +126,17 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			input := m.textarea.Value()
 			if input != "" {
 				trimmedInput := strings.TrimSpace(input)
-				if trimmedInput == "/clear" {
+				if trimmedInput == "/help" {
+					helpMsg := "Available commands:\n"
+					for cmd, desc := range commands {
+						helpMsg += fmt.Sprintf("  %s - %s\n", cmd, desc)
+					}
+					m.outputs = append(m.outputs, helpMsg)
+					m.textarea.Reset()
+					m.updateViewportContent()
+					m.viewport.GotoBottom()
+					return m, nil
+				} else if trimmedInput == "/clear" {
 					triggerMsg := "Command /clear triggered"
 					m.outputs = append(m.outputs, triggerMsg)
 					m.textarea.Reset()
