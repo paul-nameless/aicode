@@ -9,13 +9,13 @@ import (
 )
 
 // runSimpleMode processes a single prompt in non-interactive mode
-func runSimpleMode(prompt string, llm Llm, config Config) {
+func runSimpleMode(llm Llm, config Config) {
 	var finalResponse string
 
 	// Process the initial request and any tool calls
 	for {
 		// Get response from LLM
-		inferenceResponse, err := llm.Inference(prompt)
+		inferenceResponse, err := llm.Inference(config.InitialPrompt)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -43,9 +43,6 @@ func runSimpleMode(prompt string, llm Llm, config Config) {
 		for _, result := range toolResults {
 			llm.AddToolResult(result.CallID, result.Output)
 		}
-
-		// Clear prompt for next iteration - we'll continue from conversation history
-		prompt = ""
 	}
 
 	// In quiet mode, only print the final response content
@@ -167,6 +164,12 @@ func main() {
 	config.Quiet = config.Quiet || *quietFlag
 	config.Debug = config.Debug || *debugFlag
 	config.NonInteractive = config.NonInteractive || *nonInteractiveFlag
+	if config.InitialPrompt == "" {
+		args := flag.Args()
+		if len(args) != 0 {
+			config.InitialPrompt = strings.Join(args, " ")
+		}
+	}
 
 	// Setup logging to file using slog
 	f, err := os.OpenFile("aicode.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
@@ -197,15 +200,12 @@ func main() {
 	}
 
 	if config.NonInteractive {
-		initialPrompt := config.InitialPrompt
-		args := flag.Args()
-		if len(args) != 0 {
-			initialPrompt = strings.Join(args, " ")
+		if config.InitialPrompt == "" {
+			fmt.Println("No initial prompt provided")
+			os.Exit(1)
 		}
-		if initialPrompt != "" {
-			runSimpleMode(initialPrompt, llm, config)
-			return
-		}
+		runSimpleMode(llm, config)
+		return
 	}
 
 	runInteractiveMode(llm, config)

@@ -217,7 +217,9 @@ func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []
 			paramsStr = paramsStr[:61] + "..."
 		}
 
-		programRef.Send(toolExecutingMsg{toolName: toolName, params: paramsStr})
+		if programRef != nil {
+			programRef.Send(toolExecutingMsg{toolName: toolName, params: paramsStr})
+		}
 
 		// Execute the tool based on the name
 		var result string

@@ -406,7 +406,7 @@ func (m chatModel) View() string {
 func getTokenInfoString(llm Llm) string {
 	var price float64
 	var inputTokens, outputTokens int
-	
+
 	switch provider := llm.(type) {
 	case *Claude:
 		price = provider.CalculatePrice()
@@ -417,14 +417,14 @@ func getTokenInfoString(llm Llm) string {
 		inputTokens = provider.InputTokens
 		outputTokens = provider.OutputTokens
 	}
-	
+
 	if inputTokens > 0 || outputTokens > 0 {
-		return fmt.Sprintf("Tokens: %s in, %s out | Cost: $%.4f", 
-			formatTokenCount(inputTokens), 
-			formatTokenCount(outputTokens), 
+		return fmt.Sprintf("Tokens: %s in, %s out | Cost: $%.4f",
+			formatTokenCount(inputTokens),
+			formatTokenCount(outputTokens),
 			price)
 	}
-	
+
 	return ""
 }
 
