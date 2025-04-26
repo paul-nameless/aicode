@@ -63,7 +63,9 @@ func initialChatModel(llm Llm, config Config) chatModel {
 	ta.ShowLineNumbers = false
 	ta.SetHeight(4)
 
-	outputs := llm.GetFormattedHistory()
+	bold := lipgloss.NewStyle().Bold(true)
+	outputs := []string{fmt.Sprintf("Welcome to %s", bold.Render("AiCode"))}
+	outputs = append(outputs, llm.GetFormattedHistory()...)
 
 	// Initialize viewport
 	vp := viewport.New(80, 20)
@@ -439,12 +441,6 @@ func wrapText(text string, width int) string {
 }
 
 func (m chatModel) View() string {
-	// Title style
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("170")).
-		Bold(true).
-		PaddingLeft(2)
-
 	// Token info style
 	tokenStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("39")).
@@ -454,9 +450,6 @@ func (m chatModel) View() string {
 	errorStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("9")).
 		Bold(true)
-
-	// Create title with scroll information
-	title := titleStyle.Render("Chat History")
 
 	// Render viewport content
 	contentView := m.viewport.View()
@@ -494,15 +487,13 @@ func (m chatModel) View() string {
 
 	// Combine all elements
 	if m.processing {
-		return fmt.Sprintf("%s\n%s\n%s\n%s\n%s",
-			title,
+		return fmt.Sprintf("%s\n%s\n%s\n%s",
 			contentView,
 			spinnerLine,
 			inputView,
 			statusLine)
 	} else {
-		return fmt.Sprintf("%s\n%s\n\n%s\n%s",
-			title,
+		return fmt.Sprintf("%s\n\n%s\n%s",
 			contentView,
 			inputView,
 			statusLine)
