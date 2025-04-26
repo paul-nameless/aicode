@@ -382,11 +382,6 @@ func (m chatModel) View() string {
 		Bold(true).
 		PaddingLeft(2)
 
-	// Status line style
-	statusStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Italic(true)
-
 	// Token info style
 	tokenStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("39")).
@@ -408,21 +403,19 @@ func (m chatModel) View() string {
 
 	// Render status line
 	statusLine := ""
-	if m.viewport.TotalLineCount() > 0 {
-		statusLine = statusStyle.Render(fmt.Sprintf("Lines: %d/%d",
-			m.viewport.VisibleLineCount(),
-			m.viewport.TotalLineCount()))
-	}
 
 	// Add token usage and cost
 	tokenInfo := getTokenInfoString(m.llm)
 	if tokenInfo != "" {
-		statusLine += " " + tokenStyle.Render(tokenInfo)
+		statusLine = tokenStyle.Render(tokenInfo)
 	}
 
 	// Add error message if needed
 	if m.err != nil {
-		statusLine += " " + errorStyle.Render(fmt.Sprintf("Error: %v", m.err))
+		if statusLine != "" {
+			statusLine += " | "
+		}
+		statusLine += errorStyle.Render(fmt.Sprintf("Error: %v", m.err))
 	}
 
 	// Create spinner line if processing
