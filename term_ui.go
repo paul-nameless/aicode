@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -36,6 +37,7 @@ var commands = map[string]string{
 type chatModel struct {
 	textarea          textarea.Model
 	viewport          viewport.Model
+	spinner           spinner.Model
 	llm               Llm
 	config            Config
 	outputs           []string
@@ -61,10 +63,16 @@ func initialChatModel(llm Llm, config Config) chatModel {
 	vp := viewport.New(80, 20)
 	vp.Style = lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder())
 
+	// Initialize spinner
+	sp := spinner.New()
+	sp.Spinner = spinner.Points
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
+
 	// Create model
 	model := chatModel{
 		textarea:          ta,
 		viewport:          vp,
+		spinner:           sp,
 		llm:               llm,
 		config:            config,
 		outputs:           outputs,
@@ -90,7 +98,7 @@ func initialChatModel(llm Llm, config Config) chatModel {
 }
 
 func (m chatModel) Init() tea.Cmd {
-	return textarea.Blink
+	return tea.Batch(textarea.Blink, m.spinner.Tick)
 }
 
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -100,6 +108,10 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	)
 
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	case toolExecutingMsg:
 		m.outputs = append(m.outputs, fmt.Sprintf("%s(%s)", msg.toolName, msg.params))
 		m.updateViewportContent()
@@ -194,9 +206,8 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.processing = true
 				m.textarea.Reset()
 
-				// Add a processing message to the display
+				// Add the input message to the display
 				m.outputs = append(m.outputs, "> "+input)
-				m.outputs = append(m.outputs, "Thinking...")
 				m.updateViewportContent()
 				m.viewport.GotoBottom()
 
@@ -414,17 +425,32 @@ func (m chatModel) View() string {
 		statusLine += " " + errorStyle.Render(fmt.Sprintf("Error: %v", m.err))
 	}
 
-	// Add processing indicator if needed
+	// Create spinner line if processing
+	spinnerLine := ""
 	if m.processing {
-		statusLine += " " + statusStyle.Render("[Processing...]")
+		spinnerStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("205")).
+			PaddingLeft(2).
+			Width(m.viewport.Width)
+
+		spinnerLine = spinnerStyle.Render(m.spinner.View())
 	}
 
 	// Combine all elements
-	return fmt.Sprintf("%s\n%s\n\n%s\n%s",
-		title,
-		contentView,
-		inputView,
-		statusLine)
+	if m.processing {
+		return fmt.Sprintf("%s\n%s\n%s\n%s\n%s",
+			title,
+			contentView,
+			spinnerLine,
+			inputView,
+			statusLine)
+	} else {
+		return fmt.Sprintf("%s\n%s\n\n%s\n%s",
+			title,
+			contentView,
+			inputView,
+			statusLine)
+	}
 }
 
 // getTokenInfoString returns a formatted string with token usage and cost information
