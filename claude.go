@@ -61,8 +61,10 @@ type claudeResponse struct {
 	Content    []claudeContentBlock `json:"content"`
 	StopReason string               `json:"stop_reason"`
 	Usage      struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
+		InputTokens              int `json:"input_tokens"`
+		OutputTokens             int `json:"output_tokens"`
+		CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+		CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 	} `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
@@ -197,6 +199,15 @@ func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 	c.OutputTokens += out.Usage.OutputTokens
 	c.TotalOutputTokens += out.Usage.OutputTokens
 
+	// Track cache usage if available
+	if out.Usage.CacheCreationInputTokens > 0 {
+		c.CacheCreationInputTokens += out.Usage.CacheCreationInputTokens
+	}
+	if out.Usage.CacheReadInputTokens > 0 {
+		c.CacheReadInputTokens += out.Usage.CacheReadInputTokens
+		c.CachedInputTokens += out.Usage.CacheReadInputTokens
+	}
+
 	// Process the response into our unified format and build our response
 	response := InferenceResponse{
 		ToolCalls: []ToolCall{},
@@ -249,18 +260,22 @@ func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 
 // Claude struct implements Llm interface
 type Claude struct {
-	Model                 string
-	TotalInputTokens      int             // Track total input tokens used
-	TotalOutputTokens     int             // Track total output tokens used
-	InputTokens           int             // Track total input tokens used
-	OutputTokens          int             // Track total output tokens used
-	InputPricePerMillion  float64         // Price per million input tokens
-	OutputPricePerMillion float64         // Price per million output tokens
-	Config                Config          // Configuration
-	ContextWindowSize     int             // Maximum context window size in tokens
-	conversationHistory   []claudeMessage // Internal conversation history
-	systemMessages        []claudeSystemMessage
-	tools                 []claudeTool
+	Model                      string
+	TotalInputTokens           int             // Track total input tokens used
+	TotalOutputTokens          int             // Track total output tokens used
+	InputTokens                int             // Track total input tokens used
+	OutputTokens               int             // Track total output tokens used
+	CachedInputTokens          int             // Track total cached input tokens used
+	CacheCreationInputTokens   int             // Track total tokens used for cache creation
+	CacheReadInputTokens       int             // Track total tokens read from cache
+	InputPricePerMillion       float64         // Price per million input tokens
+	CachedInputPricePerMillion float64         // Price per million cached input tokens
+	OutputPricePerMillion      float64         // Price per million output tokens
+	Config                     Config          // Configuration
+	ContextWindowSize          int             // Maximum context window size in tokens
+	conversationHistory        []claudeMessage // Internal conversation history
+	systemMessages             []claudeSystemMessage
+	tools                      []claudeTool
 }
 
 func (c *Claude) Clear() {
@@ -474,7 +489,11 @@ func (c *Claude) summarizeConversation() error {
 
 // CalculatePrice calculates the price for Claude API usage
 func (c *Claude) CalculatePrice() float64 {
-	inputPrice := float64(c.TotalInputTokens) * c.InputPricePerMillion / 1000000.0
+	// Calculate uncached input tokens
+	nonCachedInputTokens := c.TotalInputTokens - c.CachedInputTokens
+	nonCachedInputPrice := float64(nonCachedInputTokens) * c.InputPricePerMillion / 1000000.0
+	cachedInputPrice := float64(c.CachedInputTokens) * c.CachedInputPricePerMillion / 1000000.0
+	inputPrice := nonCachedInputPrice + cachedInputPrice
 	outputPrice := float64(c.TotalOutputTokens) * c.OutputPricePerMillion / 1000000.0
 	return inputPrice + outputPrice
 }
@@ -549,14 +568,18 @@ func NewClaude(config Config) *Claude {
 	tools := loadClaudeTools()
 
 	return &Claude{
-		Config:                config,
-		InputTokens:           0,
-		OutputTokens:          0,
-		InputPricePerMillion:  3.0,  // $3 per million input tokens
-		OutputPricePerMillion: 15.0, // $15 per million output tokens
-		ContextWindowSize:     80_000,
-		conversationHistory:   []claudeMessage{},
-		tools:                 tools,
+		Config:                     config,
+		InputTokens:                0,
+		OutputTokens:               0,
+		CachedInputTokens:          0,
+		CacheCreationInputTokens:   0,
+		CacheReadInputTokens:       0,
+		InputPricePerMillion:       3.0, // $3 per million input tokens
+		CachedInputPricePerMillion: 3.75,
+		OutputPricePerMillion:      15.0, // $15 per million output tokens
+		ContextWindowSize:          80_000,
+		conversationHistory:        []claudeMessage{},
+		tools:                      tools,
 		systemMessages: []claudeSystemMessage{
 			{
 				Type:         "text",

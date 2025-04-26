@@ -55,8 +55,11 @@ type openaiResponse struct {
 		} `json:"message"`
 	} `json:"choices"`
 	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
+		PromptTokens        int `json:"prompt_tokens"`
+		CompletionTokens    int `json:"completion_tokens"`
+		PromptTokensDetails struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details,omitempty"`
 	} `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
@@ -193,6 +196,11 @@ func (o *OpenAI) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 	o.OutputTokens += out.Usage.CompletionTokens
 	o.TotalOutputTokens += out.Usage.CompletionTokens
 
+	// Track cached tokens if available
+	if out.Usage.PromptTokensDetails.CachedTokens > 0 {
+		o.CachedInputTokens += out.Usage.PromptTokensDetails.CachedTokens
+	}
+
 	// Convert to our unified response format
 	response := InferenceResponse{
 		Content:   out.Choices[0].Message.Content,
@@ -244,17 +252,19 @@ func (o *OpenAI) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 
 // OpenAI struct implements Llm interface
 type OpenAI struct {
-	Model                 string
-	TotalInputTokens      int             // Track total input tokens used
-	TotalOutputTokens     int             // Track total output tokens used
-	InputTokens           int             // Track total input tokens used
-	OutputTokens          int             // Track total output tokens used
-	InputPricePerMillion  float64         // Price per million input tokens
-	OutputPricePerMillion float64         // Price per million output tokens
-	Config                Config          // Configuration
-	ContextWindowSize     int             // Maximum context window size in tokens
-	conversationHistory   []openaiMessage // Internal conversation history
-	tools                 []openaiTool
+	Model                      string
+	TotalInputTokens           int     // Track total input tokens used
+	TotalOutputTokens          int     // Track total output tokens used
+	InputTokens                int     // Track total input tokens used
+	CachedInputTokens          int     // Track total cached input tokens used
+	OutputTokens               int     // Track total output tokens used
+	InputPricePerMillion       float64 // Price per million input tokens
+	CachedInputPricePerMillion float64
+	OutputPricePerMillion      float64         // Price per million output tokens
+	Config                     Config          // Configuration
+	ContextWindowSize          int             // Maximum context window size in tokens
+	conversationHistory        []openaiMessage // Internal conversation history
+	tools                      []openaiTool
 }
 
 func (o *OpenAI) Clear() {
@@ -404,8 +414,13 @@ func (o *OpenAI) summarizeConversation() error {
 
 // CalculatePrice calculates the price for OpenAI API usage
 func (o *OpenAI) CalculatePrice() float64 {
-	inputPrice := float64(o.TotalInputTokens) * o.InputPricePerMillion / 1000000.0
+	// Calculate uncached input tokens
+	nonCachedInputTokens := o.TotalInputTokens - o.CachedInputTokens
+	nonCachedInputPrice := float64(nonCachedInputTokens) * o.InputPricePerMillion / 1000000.0
+	cachedInputPrice := float64(o.CachedInputTokens) * o.CachedInputPricePerMillion / 1000000.0
+	inputPrice := nonCachedInputPrice + cachedInputPrice
 	outputPrice := float64(o.TotalOutputTokens) * o.OutputPricePerMillion / 1000000.0
+
 	return inputPrice + outputPrice
 }
 
@@ -478,14 +493,15 @@ func NewOpenAI(config Config) *OpenAI {
 	tools := loadOpenAITools()
 
 	return &OpenAI{
-		Config:                config,
-		InputTokens:           0,
-		OutputTokens:          0,
-		InputPricePerMillion:  2,
-		OutputPricePerMillion: 8,
-		ContextWindowSize:     400000,
-		conversationHistory:   conversationHistory,
-		tools:                 tools,
+		Config:                     config,
+		InputTokens:                0,
+		OutputTokens:               0,
+		InputPricePerMillion:       2,
+		CachedInputPricePerMillion: 0.5,
+		OutputPricePerMillion:      8,
+		ContextWindowSize:          400000,
+		conversationHistory:        conversationHistory,
+		tools:                      tools,
 	}
 }
 
