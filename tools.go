@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -183,11 +184,27 @@ func HandleToolCalls(toolCalls []ToolCall, config Config) (string, error) {
 }
 
 func HandleToolCallsWithResults(toolCalls []ToolCall, config Config) (string, []ToolCallResult, error) {
+	// Use global context for cancellation
+	ctx := GlobalAppContext.Context()
+	return HandleToolCallsWithResultsContext(ctx, toolCalls, config)
+}
+
+func HandleToolCallsWithResultsContext(ctx context.Context, toolCalls []ToolCall, config Config) (string, []ToolCallResult, error) {
 	var toolResponse strings.Builder
 
 	var results []ToolCallResult
 
+	// First check if context is already cancelled
+	if ctx.Err() != nil {
+		return "Operation canceled", results, ctx.Err()
+	}
+
 	for _, toolCall := range toolCalls {
+		// Check if the context has been canceled - use non-blocking pattern
+		if ctx.Err() != nil {
+			return "Operation canceled", results, ctx.Err()
+		}
+
 		toolName := toolCall.Name
 
 		slog.Debug("Tool call", "tool", toolName, "input", string(toolCall.Input))

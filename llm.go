@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ type InferenceResponse struct {
 // Llm interface defines methods for LLM providers
 type Llm interface {
 	// Inference sends a prompt to the LLM and returns the unified response
-	Inference(prompt string) (InferenceResponse, error)
+	Inference(ctx context.Context, prompt string) (InferenceResponse, error)
 	// AddMessage adds a message to the conversation history
 	AddMessage(content string, role string)
 	// AddToolResult adds a tool result to the conversation history

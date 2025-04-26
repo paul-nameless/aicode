@@ -25,6 +25,12 @@ type toolExecutingMsg struct {
 	params   string
 }
 
+// Message for cancellation notification
+type cancelOperationMsg struct{}
+
+// Message indicating processing is done
+type processingDoneMsg struct{}
+
 // Map of available commands and their descriptions
 var commands = map[string]string{
 	"/help":  "Show available commands",
@@ -116,6 +122,15 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.outputs = append(m.outputs, fmt.Sprintf("%s(%s)", msg.toolName, msg.params))
 		m.updateViewportContent()
 		return m, nil
+	case cancelOperationMsg:
+		m.outputs = append(m.outputs, "Operation canceled")
+		m.processing = false
+		m.updateViewportContent()
+		m.viewport.GotoBottom()
+		return m, nil
+	case processingDoneMsg:
+		m.processing = false
+		return m, nil
 	case updateResultMsg:
 		// Handle the update from our async processing
 		m.outputs = msg.outputs
@@ -128,6 +143,20 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyMsg:
 		switch {
+		case msg.Type == tea.KeyEsc && m.processing:
+			// Cancel the current operation
+			m.outputs = append(m.outputs, "Canceling operation...")
+			m.updateViewportContent()
+			m.viewport.GotoBottom()
+
+			// Cancel the global context
+			GlobalAppContext.Cancel()
+
+			// Instead of immediate reset, mark as no longer processing
+			// We'll reset the context after the goroutine exits
+			m.processing = false
+
+			return m, nil
 		case msg.Type == tea.KeyEnter && msg.Alt:
 			// Insert newline on Alt+Enter
 			m.textarea.InsertString("\n")
@@ -218,13 +247,38 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Get the prompt to process
 				prompt := input
 
+				// Reset the global app context for this new operation
+				GlobalAppContext.Reset()
+
 				// Use a goroutine to process the request asynchronously
 				go func() {
 					var finalErr error
+					defer func() {
+						// Always notify that processing is done when we exit this goroutine
+						if programRef != nil {
+							programRef.Send(processingDoneMsg{})
+							// Reset context for next operation
+							GlobalAppContext.Reset()
+						}
+					}()
+
+					// Get context for this operation
+					ctx := GlobalAppContext.Context()
+
+					// First check if context is already canceled
+					if ctx.Err() != nil {
+						return
+					}
 
 					for {
+						// Check if context was cancelled before making any API call
+						if ctx.Err() != nil {
+							// Operation was cancelled
+							return
+						}
+
 						// Get response from LLM
-						inferenceResponse, err := llm.Inference(prompt)
+						inferenceResponse, err := llm.Inference(ctx, prompt)
 						if err != nil {
 							finalErr = err
 							break
@@ -238,9 +292,18 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							break
 						}
 
+						// Check context again before processing tool calls
+						if ctx.Err() != nil {
+							return
+						}
+
 						// Process tool calls
-						_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls, config)
+						_, toolResults, err := HandleToolCallsWithResultsContext(ctx, inferenceResponse.ToolCalls, config)
 						if err != nil {
+							// Check if this was a cancellation
+							if ctx.Err() != nil {
+								return
+							}
 							finalErr = err
 							break
 						}
@@ -426,7 +489,7 @@ func (m chatModel) View() string {
 			PaddingLeft(2).
 			Width(m.viewport.Width)
 
-		spinnerLine = spinnerStyle.Render(m.spinner.View())
+		spinnerLine = spinnerStyle.Render(m.spinner.View() + " (Press ESC to cancel)")
 	}
 
 	// Combine all elements

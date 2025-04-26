@@ -12,10 +12,14 @@ import (
 func runSimpleMode(llm Llm, config Config) {
 	var finalResponse string
 
+	// Create a fresh context for this operation
+	GlobalAppContext.Reset()
+	ctx := GlobalAppContext.Context()
+
 	// Process the initial request and any tool calls
 	for {
-		// Get response from LLM
-		inferenceResponse, err := llm.Inference(config.InitialPrompt)
+		// Get response from LLM with context
+		inferenceResponse, err := llm.Inference(ctx, config.InitialPrompt)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -30,8 +34,8 @@ func runSimpleMode(llm Llm, config Config) {
 			break
 		}
 
-		// Process tool calls
-		_, toolResults, err := HandleToolCallsWithResults(inferenceResponse.ToolCalls, config)
+		// Process tool calls with context
+		_, toolResults, err := HandleToolCallsWithResultsContext(ctx, inferenceResponse.ToolCalls, config)
 		if err != nil {
 			if config.Debug {
 				fmt.Fprintf(os.Stderr, "Error handling tool calls: %v\n", err)

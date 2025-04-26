@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -105,16 +106,16 @@ func loadClaudeTools() []claudeTool {
 }
 
 // Inference implements the Llm interface for Claude
-func (c *Claude) Inference(prompt string) (InferenceResponse, error) {
+func (c *Claude) Inference(ctx context.Context, prompt string) (InferenceResponse, error) {
 	// Add the user's prompt to the conversation
 	c.AddMessage(prompt, "user")
 
 	// Try inference with potential retry for rate limiting
-	return c.inferenceWithRetry(false)
+	return c.inferenceWithRetry(ctx, false)
 }
 
 // inferenceWithRetry handles the actual inference with optional retry for rate limiting
-func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
+func (c *Claude) inferenceWithRetry(ctx context.Context, isRetry bool) (InferenceResponse, error) {
 	// Check if we need to summarize the conversation
 	if c.shouldSummarizeConversation() || isRetry {
 		slog.Debug("Context usage approaching limit. Summarizing conversation...")
@@ -163,6 +164,9 @@ func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 	req.Header.Set("x-api-key", c.Config.ApiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
+	// Use the context for cancellation
+	req = req.WithContext(ctx)
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return InferenceResponse{}, err
@@ -172,7 +176,7 @@ func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 	// Check for rate limit error (HTTP 429)
 	if resp.StatusCode == 429 && !isRetry {
 		slog.Debug("Received rate limit (429) error. Summarizing conversation and retrying...")
-		return c.inferenceWithRetry(true)
+		return c.inferenceWithRetry(ctx, true)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
@@ -188,7 +192,7 @@ func (c *Claude) inferenceWithRetry(isRetry bool) (InferenceResponse, error) {
 		if (strings.Contains(strings.ToLower(out.Error.Message), "rate limit") ||
 			strings.Contains(strings.ToLower(out.Error.Message), "too many requests")) && !isRetry {
 			slog.Debug("Received rate limit error in response. Summarizing conversation and retrying...")
-			return c.inferenceWithRetry(true)
+			return c.inferenceWithRetry(ctx, true)
 		}
 		return InferenceResponse{}, errors.New(out.Error.Message)
 	}
