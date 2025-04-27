@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -368,7 +369,20 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if err != nil {
 						m.outputs = append(m.outputs, fmt.Sprintf("Error loading command file: %v", err))
 					} else {
-						input = string(content)
+						// Extract arguments - everything after the command name
+						args := ""
+						if len(strings.Fields(input)) > 1 {
+							args = strings.TrimPrefix(input, cmdName)
+							args = strings.TrimSpace(args)
+						}
+						
+						// Process the command template with arguments
+						processedCmd, err := processCommandTemplate(string(content), args)
+						if err != nil {
+							m.outputs = append(m.outputs, fmt.Sprintf("Error processing command template: %v", err))
+						} else {
+							input = processedCmd
+						}
 					}
 				} else if cmd, exists := m.commands[cmdName]; exists && cmd.Handler != nil {
 					err := cmd.Handler(&m)
@@ -577,6 +591,34 @@ func customViewportKeyMap() viewport.KeyMap {
 			key.WithHelp("↓", "down"),
 		),
 	}
+}
+
+// processCommandTemplate processes a command template, replacing {{.ARGS}} with the provided arguments
+func processCommandTemplate(cmdContent, args string) (string, error) {
+	// If the template doesn't contain {{.ARGS}}, return the content as is
+	if !strings.Contains(cmdContent, "{{.ARGS}}") {
+		return cmdContent, nil
+	}
+	
+	// Create template data with arguments
+	data := struct {
+		ARGS string
+	}{
+		ARGS: args,
+	}
+	
+	// Parse and execute the template
+	tmpl, err := template.New("cmd").Parse(cmdContent)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+	
+	var result strings.Builder
+	if err := tmpl.Execute(&result, data); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+	
+	return result.String(), nil
 }
 
 // wrapText wraps long lines to fit within the specified width
