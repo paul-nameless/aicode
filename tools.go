@@ -318,11 +318,24 @@ func HandleToolCallsWithResultsContext(ctx context.Context, toolCalls []ToolCall
 // ExecuteCommand runs a shell command and returns the output as a string
 // This is exported for use in other files
 func ExecuteCommand(command string) (string, error) {
+	// Use the global context for backward compatibility
+	ctx := context.Background()
+	return ExecuteCommandWithContext(ctx, command)
+}
+
+// ExecuteCommandWithContext runs a shell command with context support for cancellation
+func ExecuteCommandWithContext(ctx context.Context, command string) (string, error) {
 	// Create a command to execute the bash command
-	cmd := exec.Command("bash", "-c", command)
+	cmd := exec.CommandContext(ctx, "bash", "-c", command)
 
 	// Set up output capture
 	output, err := cmd.CombinedOutput()
+
+	// Check if context was canceled
+	if ctx.Err() != nil {
+		return "Command execution canceled", ctx.Err()
+	}
+
 	if err != nil {
 		return fmt.Sprintf("Error executing command: %v\nOutput: %s", err, string(output)), nil
 	}
@@ -365,8 +378,9 @@ func ExecuteFindFiles(paramsJSON json.RawMessage) (string, error) {
 	cmd := fmt.Sprintf("fd --glob '%s' '%s'",
 		escapedPattern, escapedPath)
 
-	// Execute the command
-	result, err := ExecuteCommand(cmd)
+	// Execute the command with context support
+	ctx := GlobalAppContext.Context()
+	result, err := ExecuteCommandWithContext(ctx, cmd)
 	if err != nil {
 		return "", fmt.Errorf("error executing glob command: %v", err)
 	}
@@ -426,8 +440,9 @@ func ExecuteLsTool(paramsJSON json.RawMessage) (string, error) {
 		}
 	}
 
-	// Execute the command
-	result, err := ExecuteCommand(lsCmd)
+	// Execute the command with context support
+	ctx := GlobalAppContext.Context()
+	result, err := ExecuteCommandWithContext(ctx, lsCmd)
 	if err != nil {
 		return "", fmt.Errorf("error executing ls command: %v", err)
 	}
@@ -452,8 +467,9 @@ func ExecuteBashTool(paramsJSON json.RawMessage) (string, error) {
 		return "", fmt.Errorf("command parameter is required")
 	}
 
-	// Execute the command using the extracted function
-	return ExecuteCommand(params.Command)
+	// Use global context for cancellation
+	ctx := GlobalAppContext.Context()
+	return ExecuteCommandWithContext(ctx, params.Command)
 }
 
 // ViewToolParams represents the parameters for the ViewTool
@@ -512,8 +528,9 @@ func ExecuteViewTool(paramsJSON json.RawMessage) (string, error) {
 		cmd = fmt.Sprintf("head -n %d '%s'", params.Limit, escapedPath)
 	}
 
-	// Execute the command
-	result, err := ExecuteCommand(cmd)
+	// Execute the command with context support
+	ctx := GlobalAppContext.Context()
+	result, err := ExecuteCommandWithContext(ctx, cmd)
 	if err != nil {
 		return "", fmt.Errorf("error reading file: %v", err)
 	}
