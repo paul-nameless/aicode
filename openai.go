@@ -477,6 +477,10 @@ func (o *OpenAI) GetFormattedHistory() []string {
 	return outputs
 }
 
+func (o *OpenAI) GetModel() string {
+	return o.Config.Model
+}
+
 // NewOpenAI creates a new OpenAI provider
 func NewOpenAI(config Config) *OpenAI {
 	conversationHistory := []openaiMessage{

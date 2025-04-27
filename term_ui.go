@@ -66,7 +66,7 @@ func helpHandler(m *chatModel) error {
 
 func clearHandler(m *chatModel) error {
 	m.llm.Clear()
-	m.outputs = []string{}
+	m.outputs = getInitialMsgs(&m.llm)
 	return nil
 }
 
@@ -101,6 +101,13 @@ func (m *chatModel) isCmd(input string) (string, bool) {
 	return "", false
 }
 
+func getInitialMsgs(llm *Llm) []string {
+	return []string{
+		fmt.Sprintf("Welcome to %s", lipgloss.NewStyle().Bold(true).Render("AiCode")),
+		fmt.Sprintf("Model: %s", (*llm).GetModel()),
+	}
+}
+
 func initialChatModel(llm Llm, config Config) chatModel {
 	ta := textarea.New()
 	ta.Placeholder = "Ask anything..."
@@ -110,9 +117,7 @@ func initialChatModel(llm Llm, config Config) chatModel {
 	ta.ShowLineNumbers = false
 	ta.SetHeight(4)
 
-	bold := lipgloss.NewStyle().Bold(true)
-	outputs := []string{fmt.Sprintf("Welcome to %s", bold.Render("AiCode"))}
-	outputs = append(outputs, llm.GetFormattedHistory()...)
+	outputs := getInitialMsgs(&llm)
 
 	// Initialize viewport
 	vp := viewport.New(80, 20)

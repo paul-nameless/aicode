@@ -39,6 +39,7 @@ type Llm interface {
 	CalculatePrice() float64
 	// Clear clears the conversation history and preserves the system prompt
 	Clear()
+	GetModel() string
 }
 
 // ContentBlock represents a block of content in a message (text or tool related)

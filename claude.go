@@ -534,7 +534,6 @@ func (c *Claude) AddToolResult(toolUseID string, result string) {
 // GetFormattedHistory returns the conversation history formatted for display
 func (c *Claude) GetFormattedHistory() []string {
 	var outputs []string
-	outputs = append(outputs, fmt.Sprintf("Model: %s", c.Config.Model))
 
 	for _, msg := range c.conversationHistory {
 		role := msg.Role
@@ -565,6 +564,10 @@ func (c *Claude) GetFormattedHistory() []string {
 	}
 
 	return outputs
+}
+
+func (c *Claude) GetModel() string {
+	return c.Config.Model
 }
 
 // NewClaude creates a new Claude provider
