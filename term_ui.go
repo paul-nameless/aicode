@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -32,6 +34,58 @@ type cancelOperationMsg struct{}
 
 // Message indicating processing is done
 type processingDoneMsg struct{}
+
+// registerCmdCommands reads the ~/.config/aicode/cmds directory and registers commands
+func registerCmdCommands(m *chatModel) {
+	// Get user's home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		slog.Error("Failed to get user home directory", "err", err)
+		return
+	}
+
+	// Path to commands directory
+	cmdsDir := filepath.Join(homeDir, ".config/aicode/cmds")
+
+	// Check if directory exists
+	if _, err := os.Stat(cmdsDir); os.IsNotExist(err) {
+		// Directory doesn't exist yet
+		return
+	}
+
+	// Walk through all .md files in the directory
+	err = filepath.WalkDir(cmdsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories
+		if d.IsDir() {
+			return nil
+		}
+
+		// Only process .md files
+		if !strings.HasSuffix(d.Name(), ".md") {
+			return nil
+		}
+
+		// Extract base name without extension
+		baseName := strings.TrimSuffix(d.Name(), ".md")
+
+		// Register command
+		cmdName := "/cmd:" + baseName
+		m.commands[cmdName] = SlashCommand{
+			Description: "Custom command from " + d.Name(),
+			Handler:     nil, // We'll handle these commands separately
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		slog.Error("Failed to read commands directory", "err", err)
+	}
+}
 
 type SlashCommand struct {
 	Description string
@@ -149,6 +203,9 @@ func initialChatModel(llm Llm, config Config) chatModel {
 		"/cost":  {Description: "Display token usage and cost information", Handler: costHandler},
 		"/init":  {Description: "Initialize with the system prompt", Handler: nil},
 	}
+
+	// Add custom commands from ~/.config/aicode/cmds directory
+	registerCmdCommands(&model)
 
 	// Set initial viewport content
 	initialContent := ""
@@ -272,7 +329,17 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if cmdName, exists := m.isCmd(input); exists {
-				if cmd, exists := m.commands[cmdName]; exists && cmd.Handler != nil {
+				if strings.HasPrefix(cmdName, "/cmd:") {
+					// Handle /cmd: commands directly
+					cmdFile := strings.TrimPrefix(cmdName, "/cmd:")
+					cmdPath := filepath.Join(os.Getenv("HOME"), ".config/aicode/cmds", cmdFile+".md")
+					content, err := os.ReadFile(cmdPath)
+					if err != nil {
+						m.outputs = append(m.outputs, fmt.Sprintf("Error loading command file: %v", err))
+					} else {
+						input = string(content)
+					}
+				} else if cmd, exists := m.commands[cmdName]; exists && cmd.Handler != nil {
 					err := cmd.Handler(&m)
 					if err != nil {
 						m.outputs = append(m.outputs, fmt.Sprintf("Error executing command: %v", err))
