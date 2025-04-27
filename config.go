@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/goccy/go-yaml"
@@ -30,9 +31,17 @@ func LoadConfig(configPath string) (Config, error) {
 
 	config.SystemFiles = []string{"AI.md", "CLAUDE.md"}
 
-	// If config file doesn't exist, return default config
+	// First check if the provided path exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return config, nil
+		// If path doesn't exist, check in ~/.config/aicode/ directory
+		fileName := filepath.Base(configPath)
+		configName := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+
+		// Try with yml extension
+		altPath := filepath.Join(expandHomeDir("~/.config/aicode"), configName+".yml")
+		if _, err := os.Stat(altPath); err == nil {
+			configPath = altPath
+		}
 	}
 
 	// Read config file
