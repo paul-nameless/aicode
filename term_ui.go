@@ -47,7 +47,6 @@ type chatModel struct {
 	config            Config
 	outputs           []string
 	windowHeight      int
-	err               error
 	processing        bool
 	lastExitKeypress  tea.KeyType
 	lastExitTimestamp int64
@@ -209,7 +208,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case updateResultMsg:
 		// Handle the update from our async processing
 		m.outputs = append(m.outputs, msg.outputs...)
-		m.err = msg.err
+		if msg.err != nil {
+			errorStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("9")).
+				Bold(true)
+			error := errorStyle.Render(fmt.Sprintf("Error: %v", msg.err))
+			m.outputs = append(m.outputs, error)
+		}
 		m.updateViewportContent()
 
 		// Scroll viewport to the bottom to show latest content
@@ -521,11 +526,6 @@ func (m chatModel) View() string {
 		Foreground(lipgloss.Color("39")).
 		Italic(true)
 
-	// Error style
-	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("9")).
-		Bold(true)
-
 	// Render viewport content
 	contentView := m.viewport.View()
 
@@ -539,14 +539,6 @@ func (m chatModel) View() string {
 	tokenInfo := getTokenInfoString(m.llm)
 	if tokenInfo != "" {
 		statusLine = tokenStyle.Render(tokenInfo)
-	}
-
-	// Add error message if needed
-	if m.err != nil {
-		if statusLine != "" {
-			statusLine += " | "
-		}
-		statusLine += errorStyle.Render(fmt.Sprintf("Error: %v", m.err))
 	}
 
 	// Create spinner line if processing
