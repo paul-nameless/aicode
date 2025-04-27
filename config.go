@@ -21,6 +21,7 @@ type Config struct {
 	EnabledTools   []string `yaml:"enabled_tools"`
 	SystemFiles    []string `yaml:"system_files"`
 	BaseUrl        string   `yaml:"base_url"`
+	NotifyCmd      string   `yaml:"notify_cmd"`
 }
 
 // LoadConfig loads configuration from a YAML file

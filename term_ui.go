@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -52,6 +53,7 @@ type chatModel struct {
 	processing        bool
 	lastExitKeypress  tea.KeyType
 	lastExitTimestamp int64
+	focused           bool
 }
 
 func initialChatModel(llm Llm, config Config) chatModel {
@@ -88,6 +90,7 @@ func initialChatModel(llm Llm, config Config) chatModel {
 		processing:        false,
 		lastExitKeypress:  0,
 		lastExitTimestamp: 0,
+		focused:           true,
 	}
 
 	// Set initial viewport content
@@ -116,6 +119,12 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	)
 
 	switch msg := msg.(type) {
+	case tea.FocusMsg:
+		m.focused = true
+		return m, nil
+	case tea.BlurMsg:
+		m.focused = false
+		return m, nil
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -132,6 +141,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case processingDoneMsg:
 		m.processing = false
+		if !m.focused {
+			_, err := executeShellCommand(m.config.NotifyCmd)
+			if err != nil {
+				slog.Error("Failed to run notify cmd", "err", err)
+
+			}
+		}
 		return m, nil
 	case updateResultMsg:
 		// Handle the update from our async processing
@@ -538,7 +554,9 @@ var programRef *tea.Program
 
 // runInteractiveMode initializes and runs the terminal UI
 func runInteractiveMode(llm Llm, config Config) {
-	p := tea.NewProgram(initialChatModel(llm, config), tea.WithAltScreen())
+	p := tea.NewProgram(initialChatModel(llm, config),
+		tea.WithAltScreen(),
+		tea.WithReportFocus())
 	programRef = p
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
