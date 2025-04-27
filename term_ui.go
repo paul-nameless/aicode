@@ -135,9 +135,8 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case updateResultMsg:
 		// Handle the update from our async processing
-		m.outputs = msg.outputs
+		m.outputs = append(m.outputs, msg.outputs...)
 		m.err = msg.err
-		m.processing = false
 		m.updateViewportContent()
 
 		// Scroll viewport to the bottom to show latest content
@@ -254,7 +253,6 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				// Use a goroutine to process the request asynchronously
 				go func() {
-					var finalErr error
 					defer func() {
 						// Always notify that processing is done when we exit this goroutine
 						if programRef != nil {
@@ -281,8 +279,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 						// Get response from LLM
 						inferenceResponse, err := llm.Inference(ctx, prompt)
+						if programRef != nil {
+							programRef.Send(updateResultMsg{
+								outputs: []string{inferenceResponse.Content},
+								err:     err,
+							})
+						}
 						if err != nil {
-							finalErr = err
 							break
 						}
 
@@ -306,23 +309,27 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							if ctx.Err() != nil {
 								return
 							}
-							finalErr = err
+							if programRef != nil {
+								programRef.Send(updateResultMsg{
+									outputs: []string{},
+									err:     err,
+								})
+							}
 							break
 						}
 
 						// Add tool results to LLM conversation history
 						for _, result := range toolResults {
 							llm.AddToolResult(result.CallID, result.Output)
+							if programRef != nil {
+								programRef.Send(updateResultMsg{
+									outputs: []string{result.Output},
+									err:     nil,
+								})
+							}
 						}
 					}
 
-					// Once processing is complete, update the UI via the global program reference
-					if programRef != nil {
-						programRef.Send(updateResultMsg{
-							outputs: llm.GetFormattedHistory(),
-							err:     finalErr,
-						})
-					}
 				}()
 
 				return m, nil
