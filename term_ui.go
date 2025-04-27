@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -116,6 +117,7 @@ func initialChatModel(llm Llm, config Config) chatModel {
 	// Initialize viewport
 	vp := viewport.New(80, 20)
 	vp.Style = lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder())
+	vp.KeyMap = customViewportKeyMap()
 
 	// Initialize spinner
 	sp := spinner.New()
@@ -227,7 +229,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Insert newline on Alt+Enter
 			m.textarea.InsertString("\n")
 			return m, nil
-		case msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyCtrlD:
+		case msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyCtrlQ:
 			now := time.Now().UnixNano()
 			// Check if this is the second press of the same key within 2 seconds
 			if m.lastExitKeypress == msg.Type && (now-m.lastExitTimestamp) < int64(2*time.Second) {
@@ -242,7 +244,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Type == tea.KeyCtrlC {
 				statusMsg += "C"
 			} else {
-				statusMsg += "D"
+				statusMsg += "Q"
 			}
 			statusMsg += " again to exit"
 			m.outputs = append(m.outputs, statusMsg)
@@ -375,10 +377,10 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		// Handle viewport scrolling
-		case msg.String() == "up" || msg.String() == "k":
+		case msg.String() == "up":
 			m.viewport, cmd = m.viewport.Update(msg)
 			cmds = append(cmds, cmd)
-		case msg.String() == "down" || msg.String() == "j":
+		case msg.String() == "down":
 			m.viewport, cmd = m.viewport.Update(msg)
 			cmds = append(cmds, cmd)
 		case msg.String() == "pgup":
@@ -441,6 +443,27 @@ func (m *chatModel) updateViewportContent() {
 
 	m.viewport.SetContent(content)
 	m.viewport.GotoBottom()
+}
+
+func customViewportKeyMap() viewport.KeyMap {
+	return viewport.KeyMap{
+		HalfPageUp: key.NewBinding(
+			key.WithKeys("ctrl+u"),
+			key.WithHelp("ctrl+u", "½ page up"),
+		),
+		HalfPageDown: key.NewBinding(
+			key.WithKeys("ctrl+d"),
+			key.WithHelp("ctrl+d", "½ page down"),
+		),
+		Up: key.NewBinding(
+			key.WithKeys("up"),
+			key.WithHelp("↑", "up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down"),
+			key.WithHelp("↓", "down"),
+		),
+	}
 }
 
 // wrapText wraps long lines to fit within the specified width
