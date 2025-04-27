@@ -251,11 +251,15 @@ func (c *Claude) inferenceWithRetry(ctx context.Context, isRetry bool) (Inferenc
 		assistantContent = response.Content
 	}
 
-	// Add to conversation history
-	c.conversationHistory = append(c.conversationHistory, claudeMessage{
-		Role:    "assistant",
-		Content: assistantContent,
-	})
+	// If assistantContent is a string, add to conversation using AddMessage
+	if contentStr, ok := assistantContent.(string); ok {
+		c.AddMessage(contentStr, "assistant")
+	} else {
+		c.conversationHistory = append(c.conversationHistory, claudeMessage{
+			Role:    "assistant",
+			Content: assistantContent,
+		})
+	}
 
 	return response, nil
 }

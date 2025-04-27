@@ -274,9 +274,6 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.outputs = append(m.outputs, error)
 		}
 		m.updateViewportContent()
-
-		// Scroll viewport to the bottom to show latest content
-		m.viewport.GotoBottom()
 		return m, nil
 	case tea.KeyMsg:
 		switch {
@@ -433,10 +430,15 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Get response from LLM
 					inferenceResponse, err := llm.Inference(ctx, prompt)
 					if programRef != nil {
+						updateMsgs := []string{}
+						if inferenceResponse.Content != "" {
+							updateMsgs = append(updateMsgs, inferenceResponse.Content)
+						}
 						programRef.Send(updateResultMsg{
-							outputs: []string{inferenceResponse.Content},
+							outputs: updateMsgs,
 							err:     err,
 						})
+
 					}
 					if err != nil {
 						break
@@ -474,7 +476,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Add tool results to LLM conversation history
 					for _, result := range toolResults {
 						llm.AddToolResult(result.CallID, result.Output)
-						if programRef != nil && m.config.Debug {
+						if programRef != nil {
 							programRef.Send(updateResultMsg{
 								outputs: []string{result.Output},
 								err:     nil,
@@ -638,9 +640,7 @@ func (m chatModel) View() string {
 
 	// Add token usage and cost
 	tokenInfo := getTokenInfoString(m.llm)
-	if tokenInfo != "" {
-		statusLine = tokenStyle.Render(tokenInfo)
-	}
+	statusLine = tokenStyle.Render(tokenInfo)
 
 	// Create spinner line if processing
 	spinnerLine := ""
@@ -684,14 +684,11 @@ func getTokenInfoString(llm Llm) string {
 		outputTokens = provider.OutputTokens
 	}
 
-	if inputTokens > 0 || outputTokens > 0 {
-		return fmt.Sprintf("Tokens: %s in, %s out | Cost: $%.4f",
-			formatTokenCount(inputTokens),
-			formatTokenCount(outputTokens),
-			price)
-	}
+	return fmt.Sprintf("Tokens: %s in, %s out | Cost: $%.4f",
+		formatTokenCount(inputTokens),
+		formatTokenCount(outputTokens),
+		price)
 
-	return ""
 }
 
 // Global reference to the running program, used for async updates
