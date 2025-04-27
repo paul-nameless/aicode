@@ -99,7 +99,7 @@ func initialChatModel(llm Llm, config Config) chatModel {
 		initialContent += output
 		// Add blank line between messages
 		if i < len(outputs)-1 {
-			initialContent += "\n\n"
+			initialContent += "\n"
 		}
 	}
 	vp.SetContent(initialContent)
@@ -411,7 +411,7 @@ func (m *chatModel) updateViewportContent() {
 		content += wrappedOutput
 		// Add blank line between messages
 		if i < len(m.outputs)-1 {
-			content += "\n\n"
+			content += "\n"
 		}
 	}
 

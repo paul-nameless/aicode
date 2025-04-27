@@ -65,17 +65,30 @@ aicode -q "find all TODO comments in the codebase"
 
 ## Profiles
 
-I wanted an app to have different profiles/config. There are multiople use cases, for example:
+Profiles let you easily switch between AI Code configurations for different workflows. Example use cases include:
 
-- profile for commit, weak model, non interactive and custom prompt
-- separate profile which can get description of the task from jira/linear, complete the task, run tests, commit, push the changes and move task to in-review
-- profile for analysis, read only
--
+- Commit profile: uses a simple model, non-interactive mode, and a custom commit message prompt
+- Task-completion profile: fetches descriptions from Jira/Linear, completes tasks, tests, commits, pushes, and updates task status
+- Analysis profile: read-only for code review
+
+Profiles are configured as YAML files in the `configs/` directory. Pass `-c <profile>` to select a profile, e.g. `aicode -c commit`.
+
+### Example profile (`configs/commit.yml`):
+
+```yaml
+api_key_shell: "pass show example/openai.com-api-key" # Use shell cmd to get the API key, do not store it in the config file
+model: "gpt-4.1-nano" # Model name for this profile
+initial_prompt: "Create a commit message for the following changes:..."
+non_interactive: true # Disable interactive UI
+notify_cmd: "notify-send 'AI finished'" # Sent when AI finished and terminal is not in focus
+```
 
 ## Ideas
 
-- realtime
--
+- Realtime voice transcription to control AiCode
+- At the end, run aicode with another profile which will check results of first run. It can improve the quality.
+- Run multiples aicode instances, each in it's own git workspace, with different models. At the end, let them review others work and vote for the best approach. The best one will be shown to the user first and others to choose from.
+- Use reasoning model at the beginning to create a plan to do the task. Maybe run separate contexts for each step of the plan, but give plan at the beginning.
 
 ## Slash Commands
 
