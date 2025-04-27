@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -292,6 +293,39 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.processing = false
 
 			return m, nil
+		case msg.Type == tea.KeyTab:
+			// Get current text
+			input := strings.TrimSpace(m.textarea.Value())
+			if strings.HasPrefix(input, "/") {
+				// Show command suggestions
+				prefix := input
+				suggestions := []string{}
+
+				// Find commands matching the prefix
+				for cmd := range m.commands {
+					if strings.HasPrefix(cmd, prefix) {
+						suggestions = append(suggestions, cmd)
+					}
+				}
+
+				// If we have suggestions, show them
+				if len(suggestions) > 0 {
+					// Sort suggestions alphabetically
+					sort.Strings(suggestions)
+
+					// Build suggestion message
+					suggestionMsg := strings.Join(suggestions, ", ")
+					m.outputs = append(m.outputs, suggestionMsg)
+					m.updateViewportContent()
+
+					// If only one suggestion, replace the text
+					if len(suggestions) == 1 {
+						m.textarea.SetValue(suggestions[0] + " ")
+					}
+				}
+			}
+			return m, nil
+
 		case msg.Type == tea.KeyEnter && msg.Alt:
 			// Insert newline on Alt+Enter
 			m.textarea.InsertString("\n")
