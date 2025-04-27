@@ -32,12 +32,9 @@ type cancelOperationMsg struct{}
 // Message indicating processing is done
 type processingDoneMsg struct{}
 
-// Map of available commands and their descriptions
-var commands = map[string]string{
-	"/help":  "Show available commands",
-	"/clear": "Clear conversation history",
-	"/cost":  "Display token usage and cost information",
-	"/init":  "Initialize with the system prompt",
+type SlashCommand struct {
+	Description string
+	Handler     func(m *chatModel) error
 }
 
 // Bubbletea model for interactive mode
@@ -54,6 +51,53 @@ type chatModel struct {
 	lastExitKeypress  tea.KeyType
 	lastExitTimestamp int64
 	focused           bool
+	commands          map[string]SlashCommand
+}
+
+func helpHandler(m *chatModel) error {
+	helpMsg := "Available commands:\n"
+	for cmd, desc := range m.commands {
+		helpMsg += fmt.Sprintf("  %s - %s\n", cmd, desc.Description)
+	}
+	m.outputs = append(m.outputs, helpMsg)
+	return nil
+}
+
+func clearHandler(m *chatModel) error {
+	m.llm.Clear()
+	m.outputs = []string{}
+	return nil
+}
+
+func costHandler(m *chatModel) error {
+	var price float64
+	var inputDisplay, outputDisplay string
+	switch provider := m.llm.(type) {
+	case *Claude:
+		price = provider.CalculatePrice()
+		inputDisplay = formatTokenCount(provider.InputTokens)
+		outputDisplay = formatTokenCount(provider.OutputTokens)
+	case *OpenAI:
+		price = provider.CalculatePrice()
+		inputDisplay = formatTokenCount(provider.InputTokens)
+		outputDisplay = formatTokenCount(provider.OutputTokens)
+	}
+	msg := fmt.Sprintf("Tokens: %s input, %s output. Cost: $%.2f", inputDisplay, outputDisplay, price)
+	m.outputs = append(m.outputs, msg)
+	return nil
+}
+
+func (m *chatModel) isCmd(input string) (string, bool) {
+	if strings.HasPrefix(input, "/") {
+		fields := strings.Fields(input)
+		if len(fields) < 1 {
+			return "", false
+		}
+		cmdName := fields[0]
+		_, exists := m.commands[cmdName]
+		return cmdName, exists
+	}
+	return "", false
 }
 
 func initialChatModel(llm Llm, config Config) chatModel {
@@ -91,6 +135,13 @@ func initialChatModel(llm Llm, config Config) chatModel {
 		lastExitKeypress:  0,
 		lastExitTimestamp: 0,
 		focused:           true,
+	}
+
+	model.commands = map[string]SlashCommand{
+		"/help":  {Description: "Show available commands", Handler: helpHandler},
+		"/clear": {Description: "Clear conversation history", Handler: clearHandler},
+		"/cost":  {Description: "Display token usage and cost information", Handler: costHandler},
+		"/init":  {Description: "Initialize with the system prompt", Handler: nil},
 	}
 
 	// Set initial viewport content
@@ -137,7 +188,6 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.outputs = append(m.outputs, "Operation canceled")
 		m.processing = false
 		m.updateViewportContent()
-		m.viewport.GotoBottom()
 		return m, nil
 	case processingDoneMsg:
 		m.processing = false
@@ -164,7 +214,6 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Cancel the current operation
 			m.outputs = append(m.outputs, "Canceling operation...")
 			m.updateViewportContent()
-			m.viewport.GotoBottom()
 
 			// Cancel the global context
 			GlobalAppContext.Cancel()
@@ -198,7 +247,6 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			statusMsg += " again to exit"
 			m.outputs = append(m.outputs, statusMsg)
 			m.updateViewportContent()
-			m.viewport.GotoBottom()
 			return m, nil
 		case msg.Type == tea.KeyEnter:
 			// If we're already processing, ignore the input
@@ -206,150 +254,126 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			input := m.textarea.Value()
-			if input != "" {
-				trimmedInput := strings.TrimSpace(input)
-				if trimmedInput == "/help" {
-					helpMsg := "Available commands:\n"
-					for cmd, desc := range commands {
-						helpMsg += fmt.Sprintf("  %s - %s\n", cmd, desc)
+			input := strings.TrimSpace(m.textarea.Value())
+			if input == "" {
+				return m, nil
+			}
+
+			if cmdName, exists := m.isCmd(input); exists {
+				if cmd, exists := m.commands[cmdName]; exists && cmd.Handler != nil {
+					err := cmd.Handler(&m)
+					if err != nil {
+						m.outputs = append(m.outputs, fmt.Sprintf("Error executing command: %v", err))
 					}
-					m.outputs = append(m.outputs, helpMsg)
-					m.textarea.Reset()
-					m.updateViewportContent()
-					m.viewport.GotoBottom()
-					return m, nil
-				} else if trimmedInput == "/clear" {
-					triggerMsg := "Command /clear triggered"
-					m.outputs = append(m.outputs, triggerMsg)
 					m.textarea.Reset()
 					m.updateViewportContent()
 					return m, nil
-				} else if trimmedInput == "/cost" {
-					var price float64
-					var inputDisplay, outputDisplay string
-					switch provider := m.llm.(type) {
-					case *Claude:
-						price = provider.CalculatePrice()
-						inputDisplay = formatTokenCount(provider.InputTokens)
-						outputDisplay = formatTokenCount(provider.OutputTokens)
-					case *OpenAI:
-						price = provider.CalculatePrice()
-						inputDisplay = formatTokenCount(provider.InputTokens)
-						outputDisplay = formatTokenCount(provider.OutputTokens)
-					}
-					msg := fmt.Sprintf("Tokens: %s input, %s output. Cost: $%.2f", inputDisplay, outputDisplay, price)
-					m.outputs = append(m.outputs, msg)
-					m.textarea.Reset()
-					m.updateViewportContent()
-					m.viewport.GotoBottom()
-					return m, nil
-				} else if trimmedInput == "/init" {
+				} else if cmdName == "/init" {
 					input = initPrompt
 				}
+			}
 
-				// Mark as processing
-				m.processing = true
-				m.textarea.Reset()
+			// Mark as processing
+			m.processing = true
+			m.textarea.Reset()
 
-				// Add the input message to the display
-				m.outputs = append(m.outputs, "> "+input)
-				m.updateViewportContent()
-				m.viewport.GotoBottom()
+			// Add the input message to the display
+			m.outputs = append(m.outputs, "> "+input)
+			m.updateViewportContent()
 
-				// Store a copy of the model for the goroutine to use
-				llm := m.llm
-				config := m.config
+			// Store a copy of the model for the goroutine to use
+			llm := m.llm
+			config := m.config
 
-				// Get the prompt to process
-				prompt := input
+			// Get the prompt to process
+			prompt := input
 
-				// Reset the global app context for this new operation
-				GlobalAppContext.Reset()
+			// Reset the global app context for this new operation
+			GlobalAppContext.Reset()
 
-				// Use a goroutine to process the request asynchronously
-				go func() {
-					defer func() {
-						// Always notify that processing is done when we exit this goroutine
-						if programRef != nil {
-							programRef.Send(processingDoneMsg{})
-							// Reset context for next operation
-							GlobalAppContext.Reset()
-						}
-					}()
+			// Use a goroutine to process the request asynchronously
+			go func() {
+				defer func() {
+					// Always notify that processing is done when we exit this goroutine
+					if programRef != nil {
+						programRef.Send(processingDoneMsg{})
+						// Reset context for next operation
+						GlobalAppContext.Reset()
+					}
+				}()
 
-					// Get context for this operation
-					ctx := GlobalAppContext.Context()
+				// Get context for this operation
+				ctx := GlobalAppContext.Context()
 
-					// First check if context is already canceled
+				// First check if context is already canceled
+				if ctx.Err() != nil {
+					return
+				}
+
+				for {
+					// Check if context was cancelled before making any API call
+					if ctx.Err() != nil {
+						// Operation was cancelled
+						return
+					}
+
+					// Get response from LLM
+					inferenceResponse, err := llm.Inference(ctx, prompt)
+					if programRef != nil {
+						programRef.Send(updateResultMsg{
+							outputs: []string{inferenceResponse.Content},
+							err:     err,
+						})
+					}
+					if err != nil {
+						break
+					}
+
+					// Clear prompt for next iteration
+					prompt = ""
+
+					// Check if we have tool calls
+					if len(inferenceResponse.ToolCalls) == 0 {
+						break
+					}
+
+					// Check context again before processing tool calls
 					if ctx.Err() != nil {
 						return
 					}
 
-					for {
-						// Check if context was cancelled before making any API call
+					// Process tool calls
+					_, toolResults, err := HandleToolCallsWithResultsContext(ctx, inferenceResponse.ToolCalls, config)
+					if err != nil {
+						// Check if this was a cancellation
 						if ctx.Err() != nil {
-							// Operation was cancelled
 							return
 						}
-
-						// Get response from LLM
-						inferenceResponse, err := llm.Inference(ctx, prompt)
 						if programRef != nil {
 							programRef.Send(updateResultMsg{
-								outputs: []string{inferenceResponse.Content},
+								outputs: []string{},
 								err:     err,
 							})
 						}
-						if err != nil {
-							break
-						}
-
-						// Clear prompt for next iteration
-						prompt = ""
-
-						// Check if we have tool calls
-						if len(inferenceResponse.ToolCalls) == 0 {
-							break
-						}
-
-						// Check context again before processing tool calls
-						if ctx.Err() != nil {
-							return
-						}
-
-						// Process tool calls
-						_, toolResults, err := HandleToolCallsWithResultsContext(ctx, inferenceResponse.ToolCalls, config)
-						if err != nil {
-							// Check if this was a cancellation
-							if ctx.Err() != nil {
-								return
-							}
-							if programRef != nil {
-								programRef.Send(updateResultMsg{
-									outputs: []string{},
-									err:     err,
-								})
-							}
-							break
-						}
-
-						// Add tool results to LLM conversation history
-						for _, result := range toolResults {
-							llm.AddToolResult(result.CallID, result.Output)
-							if programRef != nil {
-								programRef.Send(updateResultMsg{
-									outputs: []string{result.Output},
-									err:     nil,
-								})
-							}
-						}
+						break
 					}
 
-				}()
+					// Add tool results to LLM conversation history
+					for _, result := range toolResults {
+						llm.AddToolResult(result.CallID, result.Output)
+						if programRef != nil && m.config.Debug {
+							programRef.Send(updateResultMsg{
+								outputs: []string{result.Output},
+								err:     nil,
+							})
+						}
+					}
+				}
 
-				return m, nil
-			}
+			}()
+
+			return m, nil
+
 		// Handle viewport scrolling
 		case msg.String() == "up" || msg.String() == "k":
 			m.viewport, cmd = m.viewport.Update(msg)
