@@ -145,10 +145,10 @@ func listFilesRecursive(root, path, indent string, b *strings.Builder) {
 			continue
 		}
 
-		relativePath := filepath.Join(path, name)
+		// relativePath := filepath.Join(path, name)
 		if f.IsDir() {
 			b.WriteString(indent + "- " + name + "/\n")
-			listFilesRecursive(root, relativePath, indent+"  ", b)
+			// listFilesRecursive(root, relativePath, indent+"  ", b)
 		} else {
 			b.WriteString(indent + "- " + name + "\n")
 		}
