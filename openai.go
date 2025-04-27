@@ -169,13 +169,6 @@ func (o *OpenAI) inferenceWithRetry(ctx context.Context, isRetry bool) (Inferenc
 
 	body, _ := io.ReadAll(resp.Body)
 
-	// Debug output
-	if len(body) > 200 {
-		slog.Debug("OpenAI response (truncated)", "response", string(body[:200]))
-	} else {
-		slog.Debug("OpenAI response", "response", string(body))
-	}
-
 	var out openaiResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		return InferenceResponse{}, fmt.Errorf("error unmarshaling response: %v\nResponse body: %s", err, string(body))
