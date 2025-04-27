@@ -375,7 +375,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							args = strings.TrimPrefix(input, cmdName)
 							args = strings.TrimSpace(args)
 						}
-						
+
 						// Process the command template with arguments
 						processedCmd, err := processCommandTemplate(string(content), args)
 						if err != nil {
@@ -599,25 +599,25 @@ func processCommandTemplate(cmdContent, args string) (string, error) {
 	if !strings.Contains(cmdContent, "{{.ARGS}}") {
 		return cmdContent, nil
 	}
-	
+
 	// Create template data with arguments
 	data := struct {
 		ARGS string
 	}{
 		ARGS: args,
 	}
-	
+
 	// Parse and execute the template
 	tmpl, err := template.New("cmd").Parse(cmdContent)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
-	
+
 	var result strings.Builder
 	if err := tmpl.Execute(&result, data); err != nil {
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
-	
+
 	return result.String(), nil
 }
 
@@ -726,7 +726,7 @@ func getTokenInfoString(llm Llm) string {
 		outputTokens = provider.OutputTokens
 	}
 
-	return fmt.Sprintf("Tokens: %s in, %s out | Cost: $%.4f",
+	return fmt.Sprintf("Tokens: %s in, %s out | Cost: $%.2f",
 		formatTokenCount(inputTokens),
 		formatTokenCount(outputTokens),
 		price)
