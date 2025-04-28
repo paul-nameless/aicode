@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,12 +48,12 @@ func LoadConfig(configPath string) (Config, error) {
 	// Read config file
 	configData, err := os.ReadFile(configPath)
 	if err != nil {
-		return config, err
+		slog.Debug("Failed to read config file:", "error", err)
 	}
 
 	// Unmarshal YAML
 	if err := yaml.Unmarshal(configData, &config); err != nil {
-		return config, err
+		slog.Debug("Failed to parse config file:", "error", err)
 	}
 
 	// If claude_api_key_shell is set, execute it to get the API key
