@@ -30,7 +30,7 @@ tasks:
     - mitmproxy --mode reverse:https://api.openai.com --listen-host 127.0.0.1 --listen-port 8084
 
   lint:
-    - docker run --rm -v "$(pwd):/app" -w /app golangci/golangci-lint:latest golangci-lint run
+    - docker run --rm -v "$(pwd):/app" -w /app golangci/golangci-lint:v1.64.7 golangci-lint run
 
   fmt:
     - go fmt .
