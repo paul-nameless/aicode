@@ -37,3 +37,14 @@ tasks:
 
   ch:
     deps: [fmt, lint]
+
+  release:
+    - |
+      LASTTAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0")
+      MAJOR=$(echo $LASTTAG | cut -d. -f1)
+      MINOR=$(echo $LASTTAG | cut -d. -f2)
+      NEWMINOR=$((MINOR + 1))
+      NEWTAG="${MAJOR}.${NEWMINOR}"
+      echo "Last tag: $LASTTAG, New tag: $NEWTAG"
+      git tag $NEWTAG
+      git push origin master --tags
