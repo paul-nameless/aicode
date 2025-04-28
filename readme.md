@@ -96,18 +96,32 @@ Interact using slash commands to streamline your workflow or trigger specific AI
 
 - `/help`: Display help information.
 - `/init`: Generate an AI.md file with conventions and project context.
+- `/clear`: Clear context.
 - `/cmd:<name> [arguments]`: Run a custom prompt or workflow associated with `<name>`. Examples:
     - `/cmd:review`: Runs a custom code review prompt on the current changes.
     - `/cmd:commit-msg`: Generates a commit message for staged changes.
     - `/cmd:test-summary`: Summarizes recent test outcomes.
 
-Custom prompts can be added and configured in the `configs/` directory. Use them to define reusable, specialized AI actions tailored to your workflow. Pass arguments after the command to fine-tune the prompt.
+Custom prompts can be added and configured in the `~/.config/aicode/cmds/` directory. Use them to define reusable, specialized AI actions tailored to your workflow. Pass arguments after the command to fine-tune the prompt.
 
 **Examples:**
 ```bash
-/cmd:review
-/cmd:commit-msg "Add user authentication"
-/cmd:test-summary unit
+/cmd:review last git commit
+/cmd:review uncommited changes
+```
+
+Example of custom cmd `~/.config/aicode/cmds/`:
+
+```markdown
+Review {{.ARGS}}
+
+Focus on:
+1. Logic flaws and edge cases
+2. Performance bottlenecks
+3. Security vulnerabilities
+4. Maintainability concerns
+
+Suggest specific improvements with brief explanations. First, give a detailed plan. Then, implement it with the least changes and updating minimal code.
 ```
 
 ## Contributing
