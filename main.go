@@ -176,23 +176,9 @@ func main() {
 		}
 	}
 
-	// Setup logging to file using slog
-	f, err := os.OpenFile("aicode.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-	handler := slog.NewTextHandler(f, &slog.HandlerOptions{
-		Level: func() slog.Level {
-			if config.Debug {
-				return slog.LevelDebug
-			}
-			return slog.LevelInfo
-		}(),
-	})
-	logger := slog.New(handler)
-	slog.SetDefault(logger)
-	slog.Info("AiCode started", "version", "0.1")
+	// Initialize the logger
+	InitLogger(config.Debug)
+	defer LogFile.Close()
 
 	// Initialize enabled tools
 	initializeTools(*toolsFlag, &config)
