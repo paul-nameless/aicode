@@ -21,8 +21,7 @@ go install github.com/paul-nameless/aicode@latest
 ### Using Docker
 
 ```bash
-docker build -t aicode .
-docker run --rm -it -v $PWD:/app -e OPENAI_API_KEY=your_api_key aicode
+docker run --rm -it -v $PWD:/app -e ANTHROPIC_API_KEY=$(pass show example/claude-api-key| head -n 1) ghcr.io/paul-nameless/aicode:latest
 ```
 
 ### Manual Installation
