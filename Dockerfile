@@ -2,7 +2,7 @@
 
 # Builder stage
 FROM golang:1.24.2-alpine3.21 AS builder
-RUN apk update && apk add --no-cache git
+RUN apk update && apk add --no-cache git bash
 WORKDIR /src
 
 # Download dependencies
