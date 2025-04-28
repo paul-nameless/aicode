@@ -29,3 +29,23 @@ func expandHomeDir(path string) string {
 
 	return filepath.Join(usr.HomeDir, path[1:])
 }
+
+// chunkOutput processes a long output string and returns message chunks
+// If output is more than maxLines lines, it returns first maxLines + message about remaining
+func chunkOutput(output string, maxLines int) []string {
+	lines := strings.Split(output, "\n")
+
+	if len(lines) <= maxLines {
+		// If fewer than maxLines lines, return as is
+		return []string{output}
+	}
+
+	// If more than maxLines lines, return first maxLines + info message
+	firstChunk := strings.Join(lines[:maxLines], "\n")
+	remainingCount := len(lines) - maxLines
+
+	return []string{
+		firstChunk,
+		fmt.Sprintf("... %d more lines", remainingCount),
+	}
+}

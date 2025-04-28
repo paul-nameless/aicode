@@ -492,7 +492,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						llm.AddToolResult(result.CallID, result.Output)
 						if programRef != nil {
 							programRef.Send(updateResultMsg{
-								outputs: []string{result.Output},
+								outputs: chunkOutput(result.Output, 4),
 								err:     nil,
 							})
 						}
