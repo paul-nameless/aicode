@@ -813,6 +813,5 @@ func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
 
 	// Return the output (which should be just the response in quiet mode)
 	slog.Debug("Simulacrum output", "output", string(output))
-	slog.Debug("===")
 	return string(output), nil
 }
