@@ -1,3 +1,4 @@
+version: 2
 project_name: aicode
 
 builds:
@@ -16,8 +17,7 @@ builds:
       - -s -w -X main.version={{.Version}}
 
 archives:
-  - format: tar.gz
-    # this name template makes the OS and Arch compatible with the results of uname.
+  - format_overrides: []
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
