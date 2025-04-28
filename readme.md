@@ -92,9 +92,23 @@ notify_cmd: "notify-send 'AI finished'" # Sent when AI finished and terminal is 
 
 ## Slash Commands
 
-Interact using slash commands:
-- `/help`: Display help information
-- `/init`: Generate AI.md file with conventions
+Interact using slash commands to streamline your workflow or trigger specific AI-powered tasks. The following commands are available:
+
+- `/help`: Display help information.
+- `/init`: Generate an AI.md file with conventions and project context.
+- `/cmd:<name> [arguments]`: Run a custom prompt or workflow associated with `<name>`. Examples:
+    - `/cmd:review`: Runs a custom code review prompt on the current changes.
+    - `/cmd:commit-msg`: Generates a commit message for staged changes.
+    - `/cmd:test-summary`: Summarizes recent test outcomes.
+
+Custom prompts can be added and configured in the `configs/` directory. Use them to define reusable, specialized AI actions tailored to your workflow. Pass arguments after the command to fine-tune the prompt.
+
+**Examples:**
+```bash
+/cmd:review
+/cmd:commit-msg "Add user authentication"
+/cmd:test-summary unit
+```
 
 ## Contributing
 
