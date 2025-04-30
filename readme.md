@@ -117,7 +117,7 @@ Custom prompts can be added and configured in the `~/.config/aicode/cmds/` direc
 /cmd:review uncommited changes
 ```
 
-Example of custom cmd `~/.config/aicode/cmds/`:
+Example of custom cmd `~/.config/aicode/cmds/review.md`:
 
 ```markdown
 Review {{.ARGS}}
