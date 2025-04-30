@@ -1,14 +1,15 @@
 # AiCode
 
-AI-powered CLI tool for software engineering tasks.
+AI-powered CLI agent for software engineering tasks
+
+![Demo of AiCode in action](./.github/demo.gif)
 
 ## Features
 
 - Interactive CLI interface with AI assistance
 - Seamless integration with your local development environment
-- File search, view, and edit capabilities
 - Support for multiple AI models (OpenAI, Anthropic)
-- Persistent memory for project context via CLAUDE.md
+- Persistent memory for project context via rule rule files
 
 ## Installation
 
@@ -80,7 +81,14 @@ model: "gpt-4.1-nano" # Model name for this profile
 initial_prompt: "Create a commit message for the following changes:..."
 non_interactive: true # Disable interactive UI
 notify_cmd: "notify-send 'AI finished'" # Sent when AI finished and terminal is not in focus
+system_files:
+  - AI.md
+  - CLAUDE.md
 ```
+
+## Rule files
+
+By default it can generate `AI.md` file with `/init` command but also it is reading `CLAUDE.md` by default and you can customize files with `system_files` config.
 
 ## Ideas
 
