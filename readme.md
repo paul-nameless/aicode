@@ -80,7 +80,7 @@ api_key_shell: "pass show example/openai.com-api-key" # Use shell cmd to get the
 model: "gpt-4.1-nano" # Model name for this profile
 initial_prompt: "Create a commit message for the following changes:..."
 non_interactive: true # Disable interactive UI
-notify_cmd: "notify-send 'AI finished'" # Sent when AI finished and terminal is not in focus
+notify_cmd: "notify AiCode Done" # Sent when AI finished and terminal is not in focus
 system_files:
   - AI.md
   - CLAUDE.md
