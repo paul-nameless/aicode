@@ -9,7 +9,7 @@ AI-powered CLI agent for software engineering tasks
 - Interactive CLI interface with AI assistance
 - Seamless integration with your local development environment
 - Support for multiple AI models (OpenAI, Anthropic)
-- Persistent memory for project context via rule rule files
+- Persistent memory for project context via rule files
 
 ## Installation
 
