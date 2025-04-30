@@ -142,7 +142,7 @@ func (o *OpenAI) inferenceWithRetry(ctx context.Context, isRetry bool) (Inferenc
 		Model:     o.Config.Model,
 		Messages:  o.conversationHistory,
 		Tools:     o.tools,
-		MaxTokens: 4000,
+		MaxTokens: o.MaxTokens,
 	}
 	bodyBytes, _ := json.Marshal(&reqBody)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(bodyBytes))
@@ -262,6 +262,7 @@ type OpenAI struct {
 	ContextWindowSize          int             // Maximum context window size in tokens
 	conversationHistory        []openaiMessage // Internal conversation history
 	tools                      []openaiTool
+	MaxTokens                  int
 }
 
 func (o *OpenAI) Clear() {
@@ -306,7 +307,7 @@ func (o *OpenAI) summarizeConversation() error {
 	reqBody := openaiRequest{
 		Model:       o.Config.Model,
 		Messages:    summaryMessages,
-		MaxTokens:   4000,
+		MaxTokens:   o.MaxTokens,
 		Temperature: 0.2, // Lower temperature for more consistent summaries
 	}
 
@@ -500,13 +501,9 @@ func NewOpenAI(config Config) *OpenAI {
 		InputPricePerMillion:       2,
 		CachedInputPricePerMillion: 0.5,
 		OutputPricePerMillion:      8,
-		ContextWindowSize:          400000,
+		ContextWindowSize:          1_000_000,
 		conversationHistory:        conversationHistory,
 		tools:                      tools,
+		MaxTokens:                  20_000,
 	}
-}
-
-// Init initializes the OpenAI provider with given configuration
-func (o *OpenAI) Init(config Config) error {
-	return nil
 }

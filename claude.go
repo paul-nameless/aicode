@@ -150,7 +150,7 @@ func (c *Claude) inferenceWithRetry(ctx context.Context, isRetry bool) (Inferenc
 		Messages:  c.conversationHistory,
 		System:    c.systemMessages,
 		Tools:     c.tools,
-		MaxTokens: 20000,
+		MaxTokens: c.MaxTokens,
 	}
 
 	// Create request
@@ -284,6 +284,7 @@ type Claude struct {
 	conversationHistory        []claudeMessage // Internal conversation history
 	systemMessages             []claudeSystemMessage
 	tools                      []claudeTool
+	MaxTokens                  int
 }
 
 func (c *Claude) Clear() {
@@ -338,7 +339,7 @@ func (c *Claude) summarizeConversation() error {
 		Model:       c.Config.Model,
 		Messages:    summaryMessages,
 		System:      systemMessages,
-		MaxTokens:   20000,
+		MaxTokens:   c.MaxTokens,
 		Temperature: 0.2, // Lower temperature for more consistent summaries
 	}
 
@@ -588,7 +589,7 @@ func NewClaude(config Config) *Claude {
 		InputPricePerMillion:       3.0, // $3 per million input tokens
 		CachedInputPricePerMillion: 3.75,
 		OutputPricePerMillion:      15.0, // $15 per million output tokens
-		ContextWindowSize:          80_000,
+		ContextWindowSize:          200_000,
 		conversationHistory:        []claudeMessage{},
 		tools:                      tools,
 		systemMessages: []claudeSystemMessage{
@@ -598,10 +599,6 @@ func NewClaude(config Config) *Claude {
 				CacheControl: &claudeCacheControl{Type: "ephemeral"},
 			},
 		},
+		MaxTokens: 20_000,
 	}
-}
-
-// Init initializes the Claude provider with given configuration
-func (c *Claude) Init(config Config) error {
-	return nil
 }

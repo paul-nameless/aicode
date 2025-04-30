@@ -33,8 +33,6 @@ type Llm interface {
 	AddToolResult(toolUseID string, result string)
 	// GetFormattedHistory returns the conversation history formatted for display
 	GetFormattedHistory() []string
-	// Init initializes the LLM provider with configuration
-	Init(config Config) error
 	// CalculatePrice calculates the total cost of the conversation
 	CalculatePrice() float64
 	// Clear clears the conversation history and preserves the system prompt

@@ -80,11 +80,6 @@ func initLLM(config Config) (Llm, error) {
 		llm = NewOpenAI(config)
 	}
 
-	// Initialize the provider with configuration
-	if err := llm.Init(config); err != nil {
-		return nil, err
-	}
-
 	return llm, nil
 }
 
