@@ -49,20 +49,20 @@ var ToolData = map[string]struct {
 	Schema      string
 	Description string
 }{
-	"View":          {ViewToolSchema, ViewToolDescription},
-	"Replace":       {ReplaceToolSchema, ReplaceToolDescription},
-	"Edit":          {EditToolSchema, EditToolDescription},
-	"Bash":          {BashToolSchema, BashToolDescription},
-	"Ls":            {LsToolSchema, LsToolDescription},
-	"FindFiles":     {FindFilesSchema, FindFilesDescription},
-	"DispatchAgent": {DispatchAgentSchema, DispatchAgentDescription},
-	"Fetch":         {FetchToolSchema, FetchToolDescription},
-	"Grep":          {GrepSchema, GrepDescription},
-	"Batch":         {BatchToolSchema, BatchToolDescription},
+	"View":       {ViewToolSchema, ViewToolDescription},
+	"Replace":    {ReplaceToolSchema, ReplaceToolDescription},
+	"Edit":       {EditToolSchema, EditToolDescription},
+	"Bash":       {BashToolSchema, BashToolDescription},
+	"Ls":         {LsToolSchema, LsToolDescription},
+	"FindFiles":  {FindFilesSchema, FindFilesDescription},
+	"Simulacrum": {SimulacrumSchema, SimulacrumDescription},
+	"Fetch":      {FetchToolSchema, FetchToolDescription},
+	"Grep":       {GrepSchema, GrepDescription},
+	"Batch":      {BatchToolSchema, BatchToolDescription},
 }
 
-// DefaultDispatchAgentTools is the list of tools available to DispatchAgent by default
-var DefaultDispatchAgentTools = []string{
+// DefaultSimulacrumTools is the list of tools available to Simulacrum by default
+var DefaultSimulacrumTools = []string{
 	"GlobTool",
 	"Grep",
 	"Ls",
@@ -283,10 +283,10 @@ func HandleToolCallsWithResultsContext(ctx context.Context, toolCalls []ToolCall
 			if err != nil {
 				result = fmt.Sprintf("Error executing Fetch: %v", err)
 			}
-		case "DispatchAgent":
-			result, err = ExecuteDispatchAgentTool(toolCall.Input)
+		case "Simulacrum":
+			result, err = ExecuteSimulacrumTool(toolCall.Input)
 			if err != nil {
-				result = fmt.Sprintf("Error executing DispatchAgent: %v", err)
+				result = fmt.Sprintf("Error executing Simulacrum: %v", err)
 			}
 		case "Batch":
 			result, err = ExecuteBatchTool(toolCall.Input, config)
@@ -710,8 +710,8 @@ func ExecuteEditTool(paramsJSON json.RawMessage) (string, error) {
 	return fmt.Sprintf("Successfully edited file %s, replacing %d occurrence(s) of old_string with new_string.", params.FilePath, expectedReplacements), nil
 }
 
-// DispatchAgentToolParams represents the parameters for the DispatchAgent tool
-type DispatchAgentToolParams struct {
+// DispatchAgentToolParams represents the parameters for the Simulacrum tool
+type SimulacrumToolParams struct {
 	Prompt string `json:"prompt"`
 }
 
@@ -760,8 +760,8 @@ func ExecuteBatchTool(paramsJSON json.RawMessage, config Config) (string, error)
 			toolResult, err = ExecuteReplaceTool(inputJson)
 		case "Fetch":
 			toolResult, err = ExecuteFetchTool(inputJson)
-		case "DispatchAgent":
-			toolResult, err = ExecuteDispatchAgentTool(inputJson)
+		case "Simulacrum":
+			toolResult, err = ExecuteSimulacrumTool(inputJson)
 		default:
 			toolResult = "tool not implemented"
 		}
@@ -774,10 +774,10 @@ func ExecuteBatchTool(paramsJSON json.RawMessage, config Config) (string, error)
 	return strings.Join(results, "\n"), nil
 }
 
-func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
-	params, err := parseToolParams[DispatchAgentToolParams](paramsJSON, "Prompt")
+func ExecuteSimulacrumTool(paramsJSON json.RawMessage) (string, error) {
+	params, err := parseToolParams[SimulacrumToolParams](paramsJSON, "Prompt")
 	if err != nil {
-		return "", fmt.Errorf("failed to parse DispatchAgent tool parameters: %v", err)
+		return "", fmt.Errorf("failed to parse Simulacrum tool parameters: %v", err)
 	}
 
 	// Validate parameters
@@ -791,13 +791,13 @@ func ExecuteDispatchAgentTool(paramsJSON json.RawMessage) (string, error) {
 		return "", fmt.Errorf("failed to get executable path: %v", err)
 	}
 
-	// Get dispatch agent tools from DefaultDispatchAgentTools
-	// Only include the tools from DefaultDispatchAgentTools that are also enabled in config
-	var dispatchAgentTools []string
-	dispatchAgentTools = append(dispatchAgentTools, DefaultDispatchAgentTools...)
+	// Get dispatch agent tools from DefaultSimulacrumTools
+	// Only include the tools from DefaultSimulacrumTools that are also enabled in config
+	var simulacrumTools []string
+	simulacrumTools = append(simulacrumTools, DefaultSimulacrumTools...)
 
 	// Build the tools parameter string
-	toolsParam := strings.Join(dispatchAgentTools, ",")
+	toolsParam := strings.Join(simulacrumTools, ",")
 
 	// Create command to run the same executable with the prompt and tools parameter
 	cmd := exec.Command(execPath, "-q", "-n", "-tools", toolsParam, params.Prompt)

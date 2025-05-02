@@ -1,5 +1,5 @@
 {
-  "name": "DispatchAgent",
+  "name": "Simulacrum",
   "description": "Launch a new agent that has access to the following tools: View, Glob, Grep, Ls.",
   "parameters": {
     "type": "object",

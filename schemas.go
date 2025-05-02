@@ -22,8 +22,8 @@ var LsToolDescription string
 //go:embed tools/find_files.md
 var FindFilesDescription string
 
-//go:embed tools/dispatch_agent.md
-var DispatchAgentDescription string
+//go:embed tools/simulacrum.md
+var SimulacrumDescription string
 
 //go:embed tools/fetch.md
 var FetchToolDescription string
@@ -55,8 +55,8 @@ var LsToolSchema string
 //go:embed tools/find_files.json
 var FindFilesSchema string
 
-//go:embed tools/dispatch_agent.json
-var DispatchAgentSchema string
+//go:embed tools/simulacrum.json
+var SimulacrumSchema string
 
 //go:embed tools/fetch.json
 var FetchToolSchema string

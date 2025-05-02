@@ -96,6 +96,8 @@ By default it can generate `AI.md` file with `/init` command but also it is read
 - At the end, run aicode with another profile which will check results of first run. It can improve the quality.
 - Run multiples aicode instances, each in it's own git workspace, with different models. At the end, let them review others work and vote for the best approach. The best one will be shown to the user first and others to choose from.
 - Use reasoning model at the beginning to create a plan to do the task. Maybe run separate contexts for each step of the plan, but give plan at the beginning.
+- Resume conversations from where you left off from with --resume
+- Todo list
 
 ## Slash Commands
 
