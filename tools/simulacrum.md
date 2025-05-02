@@ -1,6 +1,6 @@
 # Simulacrum
 
-Launch a new agent that has access to the following tools: Bash, Batch, Glob, Grep, Ls, Read, Edit, Write, Fetch. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries, use the Agent tool to perform the search for you.
+A tool that allows an AI agent to make a copy of themselves with access to tools: Bash, Batch, Glob, Grep, Ls, Read, Edit, Write, Fetch. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries, use the Agent tool to perform the search for you.
 
 **When to use the Agent tool:**
 - If you are searching for a keyword like "config" or "logger", or for questions like "which file does X?", the Agent tool is strongly recommended.
