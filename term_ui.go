@@ -332,6 +332,64 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// If only one suggestion, replace the text
 					if len(suggestions) == 1 {
 						m.textarea.SetValue(suggestions[0] + " ")
+					} else if len(suggestions) > 1 {
+						// Find common prefix among suggestions
+						commonPrefix := findCommonPrefix(suggestions)
+						
+						// Only autocomplete if the common prefix is longer than the current input
+						if len(commonPrefix) > len(prefix) {
+							m.textarea.SetValue(commonPrefix)
+						}
+					}
+				}
+			} else {
+				// Check for file name completion
+				lineInfo := m.textarea.LineInfo()
+				cursorPos := lineInfo.CharOffset
+				content := m.textarea.Value()
+
+				// Extract the current word at cursor position
+				word := getCurrentWord(content, cursorPos)
+
+				if word != "" {
+					matches, err := filepath.Glob(word + "*")
+					if err == nil && len(matches) > 0 {
+						// Sort matches
+						sort.Strings(matches)
+
+						// Build suggestion message
+						suggestionMsg := strings.Join(matches, ", ")
+						m.outputs = append(m.outputs, suggestionMsg)
+						m.updateViewportContent()
+
+						// Find the start of the current word
+						wordStart := cursorPos
+						for wordStart > 0 && !isWordSeparator(content[wordStart-1]) {
+							wordStart--
+						}
+
+						// If only one match, replace the current word with it
+						if len(matches) == 1 {
+							// Replace the word
+							newContent := content[:wordStart] + matches[0] + content[cursorPos:]
+							m.textarea.SetValue(newContent)
+							
+							// Set cursor at end of inserted filename
+							m.textarea.SetCursor(wordStart + len(matches[0]))
+						} else if len(matches) > 1 {
+							// Find common prefix
+							commonPrefix := findCommonPrefix(matches)
+							
+							// Only autocomplete if the common prefix is longer than the current word
+							if len(commonPrefix) > len(word) {
+								// Replace the word with the common prefix
+								newContent := content[:wordStart] + commonPrefix + content[cursorPos:]
+								m.textarea.SetValue(newContent)
+								
+								// Set cursor at end of inserted common prefix
+								m.textarea.SetCursor(wordStart + len(commonPrefix))
+							}
+						}
 					}
 				}
 			}
@@ -634,6 +692,60 @@ func processCommandTemplate(cmdContent, args string) (string, error) {
 	}
 
 	return result.String(), nil
+}
+
+// isWordSeparator checks if a rune is a word separator
+func isWordSeparator(r byte) bool {
+	return r == ' ' || r == '\t' || r == '\n' || r == ',' || r == ';' || r == ':' || r == '=' || r == '(' || r == ')' || r == '[' || r == ']' || r == '{' || r == '}'
+}
+
+// getCurrentWord extracts the word at cursor position
+func getCurrentWord(text string, cursorPos int) string {
+	if cursorPos <= 0 || cursorPos > len(text) {
+		return ""
+	}
+
+	// Find the start of the current word
+	wordStart := cursorPos
+	for wordStart > 0 && !isWordSeparator(text[wordStart-1]) {
+		wordStart--
+	}
+
+	// Extract the word
+	if wordStart < cursorPos {
+		return text[wordStart:cursorPos]
+	}
+
+	return ""
+}
+
+// findCommonPrefix finds the longest common prefix of a set of strings
+func findCommonPrefix(strs []string) string {
+	if len(strs) == 0 {
+		return ""
+	}
+	if len(strs) == 1 {
+		return strs[0]
+	}
+
+	// Start with the first string as the prefix
+	prefix := strs[0]
+
+	// Compare with other strings
+	for i := 1; i < len(strs); i++ {
+		// Find common prefix between current prefix and strs[i]
+		j := 0
+		for j < len(prefix) && j < len(strs[i]) && prefix[j] == strs[i][j] {
+			j++
+		}
+		// Update prefix to common part
+		prefix = prefix[:j]
+		if prefix == "" {
+			break
+		}
+	}
+
+	return prefix
 }
 
 // wrapText wraps long lines to fit within the specified width
