@@ -308,89 +308,33 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Get current text
 			input := strings.TrimSpace(m.textarea.Value())
 			if strings.HasPrefix(input, "/") {
-				// Show command suggestions
-				prefix := input
-				suggestions := []string{}
+				// Handle command suggestions
+				suggestions := m.showCommandSuggestions(input)
 
-				// Find commands matching the prefix
-				for cmd := range m.commands {
-					if strings.HasPrefix(cmd, prefix) {
-						suggestions = append(suggestions, cmd)
-					}
-				}
-
-				// If we have suggestions, show them
+				// If we have suggestions, apply the completion
 				if len(suggestions) > 0 {
-					// Sort suggestions alphabetically
-					sort.Strings(suggestions)
-
-					// Build suggestion message
-					suggestionMsg := strings.Join(suggestions, ", ")
-					m.outputs = append(m.outputs, suggestionMsg)
-					m.updateViewportContent()
-
-					// If only one suggestion, replace the text
 					if len(suggestions) == 1 {
 						m.textarea.SetValue(suggestions[0] + " ")
-					} else if len(suggestions) > 1 {
-						// Find common prefix among suggestions
+					} else {
 						commonPrefix := findCommonPrefix(suggestions)
-						
-						// Only autocomplete if the common prefix is longer than the current input
-						if len(commonPrefix) > len(prefix) {
+						if len(commonPrefix) > len(input) {
 							m.textarea.SetValue(commonPrefix)
 						}
 					}
 				}
 			} else {
-				// Check for file name completion
+				// Handle filename completion
 				lineInfo := m.textarea.LineInfo()
 				cursorPos := lineInfo.CharOffset
 				content := m.textarea.Value()
 
-				// Extract the current word at cursor position
-				word := getCurrentWord(content, cursorPos)
+				// Get matches and word start position
+				matches, wordStart := m.completeFilename(content, cursorPos)
 
-				if word != "" {
-					matches, err := filepath.Glob(word + "*")
-					if err == nil && len(matches) > 0 {
-						// Sort matches
-						sort.Strings(matches)
-
-						// Build suggestion message
-						suggestionMsg := strings.Join(matches, ", ")
-						m.outputs = append(m.outputs, suggestionMsg)
-						m.updateViewportContent()
-
-						// Find the start of the current word
-						wordStart := cursorPos
-						for wordStart > 0 && !isWordSeparator(content[wordStart-1]) {
-							wordStart--
-						}
-
-						// If only one match, replace the current word with it
-						if len(matches) == 1 {
-							// Replace the word
-							newContent := content[:wordStart] + matches[0] + content[cursorPos:]
-							m.textarea.SetValue(newContent)
-							
-							// Set cursor at end of inserted filename
-							m.textarea.SetCursor(wordStart + len(matches[0]))
-						} else if len(matches) > 1 {
-							// Find common prefix
-							commonPrefix := findCommonPrefix(matches)
-							
-							// Only autocomplete if the common prefix is longer than the current word
-							if len(commonPrefix) > len(word) {
-								// Replace the word with the common prefix
-								newContent := content[:wordStart] + commonPrefix + content[cursorPos:]
-								m.textarea.SetValue(newContent)
-								
-								// Set cursor at end of inserted common prefix
-								m.textarea.SetCursor(wordStart + len(commonPrefix))
-							}
-						}
-					}
+				// If we have matches, apply the completion
+				if len(matches) > 0 {
+					// Apply the completion
+					m.applyCompletion(matches, content, wordStart, cursorPos)
 				}
 			}
 			return m, nil
@@ -643,6 +587,88 @@ func (m *chatModel) updateViewportContent() {
 
 	m.viewport.SetContent(content)
 	m.viewport.GotoBottom()
+}
+
+// showCommandSuggestions processes command completions and displays them
+func (m *chatModel) showCommandSuggestions(prefix string) []string {
+	suggestions := []string{}
+
+	// Find commands matching the prefix
+	for cmd := range m.commands {
+		if strings.HasPrefix(cmd, prefix) {
+			suggestions = append(suggestions, cmd)
+		}
+	}
+
+	// If we have suggestions, show them
+	if len(suggestions) > 0 {
+		// Sort suggestions alphabetically
+		sort.Strings(suggestions)
+
+		// Build suggestion message
+		suggestionMsg := strings.Join(suggestions, ", ")
+		m.outputs = append(m.outputs, suggestionMsg)
+		m.updateViewportContent()
+	}
+
+	return suggestions
+}
+
+// completeFilename handles filename completion based on cursor position
+func (m *chatModel) completeFilename(content string, cursorPos int) ([]string, int) {
+	// Extract the current word at cursor position
+	word := getCurrentWord(content, cursorPos)
+
+	// If no word is found, return empty result
+	if word == "" {
+		return nil, 0
+	}
+
+	// Find matching files
+	matches, err := filepath.Glob(word + "*")
+	if err != nil || len(matches) == 0 {
+		return nil, 0
+	}
+
+	// Sort matches
+	sort.Strings(matches)
+
+	// Build suggestion message
+	suggestionMsg := strings.Join(matches, ", ")
+	m.outputs = append(m.outputs, suggestionMsg)
+	m.updateViewportContent()
+
+	// Find the start of the current word
+	wordStart := cursorPos
+	for wordStart > 0 && !isWordSeparator(content[wordStart-1]) {
+		wordStart--
+	}
+
+	return matches, wordStart
+}
+
+// applyCompletion applies the completion to the textarea
+func (m *chatModel) applyCompletion(suggestions []string, currentText string, wordStart int, cursorPos int) {
+	// If only one suggestion, replace the text with it
+	if len(suggestions) == 1 {
+		newContent := currentText[:wordStart] + suggestions[0] + currentText[cursorPos:]
+		m.textarea.SetValue(newContent)
+
+		// Set cursor at end of inserted text
+		m.textarea.SetCursor(wordStart + len(suggestions[0]))
+	} else if len(suggestions) > 1 {
+		// Find common prefix
+		commonPrefix := findCommonPrefix(suggestions)
+
+		// Only autocomplete if the common prefix is longer than the current text
+		if len(commonPrefix) > len(currentText[wordStart:cursorPos]) {
+			newContent := currentText[:wordStart] + commonPrefix + currentText[cursorPos:]
+			m.textarea.SetValue(newContent)
+
+			// Set cursor at end of inserted common prefix
+			m.textarea.SetCursor(wordStart + len(commonPrefix))
+		}
+	}
 }
 
 func customViewportKeyMap() viewport.KeyMap {
