@@ -12,3 +12,6 @@ var initPrompt string
 
 //go:embed prompts/summary.md
 var summaryPrompt string
+
+//go:embed prompts/commit.md
+var defaultCommitPrompt string

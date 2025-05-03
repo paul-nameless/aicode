@@ -200,10 +200,11 @@ func initialChatModel(llm Llm, config Config) chatModel {
 	}
 
 	model.commands = map[string]SlashCommand{
-		"/help":  {Description: "Show available commands", Handler: helpHandler},
-		"/clear": {Description: "Clear conversation history", Handler: clearHandler},
-		"/cost":  {Description: "Display token usage and cost information", Handler: costHandler},
-		"/init":  {Description: "Initialize with the system prompt", Handler: nil},
+		"/help":   {Description: "Show available commands", Handler: helpHandler},
+		"/clear":  {Description: "Clear conversation history", Handler: clearHandler},
+		"/cost":   {Description: "Display token usage and cost information", Handler: costHandler},
+		"/init":   {Description: "Initialize with the system prompt", Handler: nil},
+		"/commit": {Description: "Commit changes", Handler: nil},
 	}
 
 	// Add custom commands from ~/.config/aicode/cmds directory
@@ -394,6 +395,8 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				} else if cmdName == "/init" {
 					input = initPrompt
+				} else if cmdName == "/commit" {
+					input = defaultCommitPrompt
 				}
 			}
 
