@@ -112,9 +112,21 @@ type chatModel struct {
 
 func helpHandler(m *chatModel) error {
 	helpMsg := "Available commands:\n"
-	for cmd, desc := range m.commands {
-		helpMsg += fmt.Sprintf("  %s - %s\n", cmd, desc.Description)
+	
+	// Create a slice of command names for sorting
+	cmdNames := make([]string, 0, len(m.commands))
+	for cmd := range m.commands {
+		cmdNames = append(cmdNames, cmd)
 	}
+	
+	// Sort command names alphabetically
+	sort.Strings(cmdNames)
+	
+	// Display commands in sorted order
+	for _, cmd := range cmdNames {
+		helpMsg += fmt.Sprintf("  %s - %s\n", cmd, m.commands[cmd].Description)
+	}
+	
 	m.outputs = append(m.outputs, helpMsg)
 	return nil
 }
