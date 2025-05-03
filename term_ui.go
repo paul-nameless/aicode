@@ -112,21 +112,21 @@ type chatModel struct {
 
 func helpHandler(m *chatModel) error {
 	helpMsg := "Available commands:\n"
-	
+
 	// Create a slice of command names for sorting
 	cmdNames := make([]string, 0, len(m.commands))
 	for cmd := range m.commands {
 		cmdNames = append(cmdNames, cmd)
 	}
-	
+
 	// Sort command names alphabetically
 	sort.Strings(cmdNames)
-	
+
 	// Display commands in sorted order
 	for _, cmd := range cmdNames {
 		helpMsg += fmt.Sprintf("  %s - %s\n", cmd, m.commands[cmd].Description)
 	}
-	
+
 	m.outputs = append(m.outputs, helpMsg)
 	return nil
 }
@@ -590,12 +590,12 @@ func (m *chatModel) updateViewportContent() {
 func customViewportKeyMap() viewport.KeyMap {
 	return viewport.KeyMap{
 		HalfPageUp: key.NewBinding(
-			key.WithKeys("ctrl+u"),
-			key.WithHelp("ctrl+u", "½ page up"),
+			key.WithKeys("ctrl+p"),
+			key.WithHelp("ctrl+p", "½ page up"),
 		),
 		HalfPageDown: key.NewBinding(
-			key.WithKeys("ctrl+d"),
-			key.WithHelp("ctrl+d", "½ page down"),
+			key.WithKeys("ctrl+n"),
+			key.WithHelp("ctrl+n", "½ page down"),
 		),
 		Up: key.NewBinding(
 			key.WithKeys("up"),
