@@ -13,17 +13,18 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	ApiKeyShell    string   `yaml:"api_key_shell"`
-	ApiKey         string   `yaml:"api_key"`
-	Model          string   `yaml:"model"`
-	InitialPrompt  string   `yaml:"initial_prompt"`
-	NonInteractive bool     `yaml:"non_interactive"`
-	Debug          bool     `yaml:"debug"`
-	Quiet          bool     `yaml:"quiet"`
-	EnabledTools   []string `yaml:"enabled_tools"`
-	SystemFiles    []string `yaml:"system_files"`
-	BaseUrl        string   `yaml:"base_url"`
-	NotifyCmd      string   `yaml:"notify_cmd"`
+	ApiKeyShell     string   `yaml:"api_key_shell"`
+	ApiKey          string   `yaml:"api_key"`
+	Model           string   `yaml:"model"`
+	InitialPrompt   string   `yaml:"initial_prompt"`
+	NonInteractive  bool     `yaml:"non_interactive"`
+	Debug           bool     `yaml:"debug"`
+	Quiet           bool     `yaml:"quiet"`
+	EnabledTools    []string `yaml:"enabled_tools"`
+	SystemFiles     []string `yaml:"system_files"`
+	BaseUrl         string   `yaml:"base_url"`
+	NotifyCmd       string   `yaml:"notify_cmd"`
+	ReasoningEffort string   `yaml:"reasoning_effort"`
 }
 
 // LoadConfig loads configuration from a YAML file
@@ -86,6 +87,11 @@ func LoadConfig(configPath string) (Config, error) {
 
 	if config.BaseUrl == "" {
 		config.BaseUrl = os.Getenv("BASE_URL")
+	}
+
+	// Set default reasoning effort to medium if not specified
+	if config.ReasoningEffort == "" {
+		config.ReasoningEffort = "medium"
 	}
 
 	if config.ApiKey == "" || config.Model == "" {

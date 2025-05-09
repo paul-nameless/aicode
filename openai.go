@@ -27,12 +27,17 @@ type openaiToolCall struct {
 	Function openaiFunction `json:"function"`
 }
 
+type openaiReasoning struct {
+	Effort string `json:"effort,omitempty"`
+}
+
 type openaiRequest struct {
-	Model       string          `json:"model"`
-	Messages    []openaiMessage `json:"messages"`
-	Tools       []openaiTool    `json:"tools,omitempty"`
-	MaxTokens   int             `json:"max_tokens,omitempty"`
-	Temperature float64         `json:"temperature,omitempty"`
+	Model       string           `json:"model"`
+	Messages    []openaiMessage  `json:"messages"`
+	Tools       []openaiTool     `json:"tools,omitempty"`
+	MaxTokens   int              `json:"max_tokens,omitempty"`
+	Temperature float64          `json:"temperature,omitempty"`
+	Reasoning   *openaiReasoning `json:"reasoning,omitempty"`
 }
 
 type openaiTool struct {
@@ -143,6 +148,13 @@ func (o *OpenAI) inferenceWithRetry(ctx context.Context, isRetry bool) (Inferenc
 		Messages:  o.conversationHistory,
 		Tools:     o.tools,
 		MaxTokens: o.MaxTokens,
+	}
+
+	// Add reasoning effort parameter for OpenAI models that support it
+	if strings.HasPrefix(o.Config.Model, "o") {
+		reqBody.Reasoning = &openaiReasoning{
+			Effort: o.Config.ReasoningEffort,
+		}
 	}
 	bodyBytes, _ := json.Marshal(&reqBody)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(bodyBytes))
@@ -309,6 +321,13 @@ func (o *OpenAI) summarizeConversation() error {
 		Messages:    summaryMessages,
 		MaxTokens:   o.MaxTokens,
 		Temperature: 0.2, // Lower temperature for more consistent summaries
+	}
+
+	// Add reasoning effort parameter for OpenAI models that support it
+	if strings.HasPrefix(o.Config.Model, "o") {
+		reqBody.Reasoning = &openaiReasoning{
+			Effort: o.Config.ReasoningEffort,
+		}
 	}
 
 	// Create request
