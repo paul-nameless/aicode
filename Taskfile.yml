@@ -40,11 +40,27 @@ tasks:
 
   release:
     - |
-      LASTTAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0")
-      MAJOR=$(echo $LASTTAG | cut -d. -f1)
+      LASTTAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+      MAJOR=$(echo $LASTTAG | cut -d. -f1 | tr -d 'v')
       MINOR=$(echo $LASTTAG | cut -d. -f2)
-      NEWMINOR=$((MINOR + 1))
-      NEWTAG="${MAJOR}.${NEWMINOR}"
+      PATCH=$(echo $LASTTAG | cut -d. -f3)
+
+      # Default to minor bump, but allow overriding with CLI_ARGS
+      TYPE="{{.CLI_ARGS}}"
+      if [ -z "$TYPE" ] || [ "$TYPE" = "minor" ]; then
+        NEWMINOR=$((MINOR + 1))
+        NEWTAG="v$MAJOR.$NEWMINOR.0"
+      elif [ "$TYPE" = "patch" ]; then
+        NEWPATCH=$((PATCH + 1))
+        NEWTAG="v$MAJOR.$MINOR.$NEWPATCH"
+      elif [ "$TYPE" = "major" ]; then
+        NEWMAJOR=$((MAJOR + 1))
+        NEWTAG="v$NEWMAJOR.0.0"
+      else
+        echo "Invalid release type. Use 'minor', 'patch', or 'major'"
+        exit 1
+      fi
+
       echo "Last tag: $LASTTAG, New tag: $NEWTAG"
       git tag $NEWTAG
       git push origin master --tags
