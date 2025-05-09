@@ -8,6 +8,8 @@ WORKDIR /src
 # Download dependencies
 COPY go.mod go.sum ./
 
+RUN go mod download
+
 # Build the application
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /aicode

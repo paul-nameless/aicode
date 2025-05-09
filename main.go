@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime/debug"
 	"strings"
 )
 
@@ -149,7 +150,14 @@ func main() {
 	configFlag := flag.String("p", "~/.config/aicode/config.yml", "Profile/config file")
 	toolsFlag := flag.String("tools", "", "Comma-separated list of tools to enable (default: all tools)")
 	debugFlag := flag.Bool("d", false, "Enable debug logging")
+	versionFlag := flag.Bool("version", false, "Display the application version and exit")
 	flag.Parse()
+
+	if *versionFlag {
+		info, _ := debug.ReadBuildInfo()
+		fmt.Println(info.Main.Version)
+		os.Exit(0)
+	}
 
 	configPath := expandHomeDir(*configFlag)
 
