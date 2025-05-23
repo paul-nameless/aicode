@@ -79,7 +79,7 @@ func LoadConfig(configPath string) (Config, error) {
 	}
 
 	if config.Model == "" {
-		config.Model = "claude-3-7-sonnet-latest"
+		config.Model = "claude-sonnet-4-20250514"
 		if os.Getenv("OPENAI_API_KEY") != "" {
 			config.Model = "o4-mini"
 		}
